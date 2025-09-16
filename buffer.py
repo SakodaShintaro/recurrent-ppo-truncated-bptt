@@ -1,6 +1,7 @@
-from gymnasium import spaces
-import torch
 import numpy as np
+import torch
+from gymnasium import spaces
+
 
 class Buffer():
     """The buffer stores and prepares the training data. It supports recurrent policies. """

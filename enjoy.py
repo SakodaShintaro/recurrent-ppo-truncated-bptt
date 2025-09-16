@@ -1,9 +1,12 @@
-import numpy as np
 import pickle
+
+import numpy as np
 import torch
 from docopt import docopt
+
 from model import ActorCriticModel
 from utils import create_env
+
 
 def main():
     # Command line arguments via docopt

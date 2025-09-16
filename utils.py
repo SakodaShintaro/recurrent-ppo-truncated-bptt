@@ -1,7 +1,8 @@
 from environments.cartpole_env import CartPole
+from environments.memory_gym_env import MemoryGymWrapper
 from environments.minigrid_env import Minigrid
 from environments.poc_memory_env import PocMemoryEnv
-from environments.memory_gym_env import MemoryGymWrapper
+
 
 def create_env(config:dict, render:bool=False):
     """Initializes an environment based on the provided environment name.

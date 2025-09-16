@@ -4,6 +4,7 @@ from torch import nn
 from torch.distributions import Categorical
 from torch.nn import functional as F
 
+
 class ActorCriticModel(nn.Module):
     def __init__(self, config, observation_space, action_space_shape):
         """Model setup

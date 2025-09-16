@@ -1,16 +1,18 @@
-import numpy as np
 import os
 import pickle
-import torch
 import time
+from collections import deque
+
+import numpy as np
+import torch
 from torch import optim
+from torch.utils.tensorboard import SummaryWriter
+
 from buffer import Buffer
 from model import ActorCriticModel
+from utils import create_env, polynomial_decay
 from worker import Worker
-from utils import create_env
-from utils import polynomial_decay
-from collections import deque
-from torch.utils.tensorboard import SummaryWriter
+
 
 class PPOTrainer:
     def __init__(self, config:dict, run_id:str="run", device:torch.device=torch.device("cpu")) -> None:

@@ -1,6 +1,8 @@
+import time
+
 import gymnasium as gym
 import numpy as np
-import time
+
 
 class CartPole:
     def __init__(self, mask_velocity = False, realtime_mode = False):

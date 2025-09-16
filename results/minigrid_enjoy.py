@@ -1,15 +1,18 @@
 """The purpose of this script is to render one minigrid episode to a gif."""
 
-import parent_path
-import numpy as np
-import pickle
-import torch
-import os
 import inspect
+import os
+import pickle
+
+import imageio
+import numpy as np
+import parent_path
+import torch
 from docopt import docopt
+
 from model import ActorCriticModel
 from utils import create_env
-import imageio
+
 
 def main():
     # Command line arguments via docopt
