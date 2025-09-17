@@ -36,7 +36,7 @@ def main():
     model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
-    
+
     # Run and render episode
     done = False
     episode_rewards = []
@@ -53,7 +53,9 @@ def main():
         # Render environment
         env.render()
         # Forward model
-        policy, value, recurrent_cell = model(torch.tensor(np.expand_dims(obs, 0)), recurrent_cell, device, 1)
+        policy, value, recurrent_cell = model(
+            torch.tensor(np.expand_dims(obs, 0)), recurrent_cell, device, 1
+        )
         # Sample action
         action = []
         for action_branch in policy:
@@ -61,7 +63,7 @@ def main():
         # Step environment
         obs, reward, done, info = env.step(action)
         episode_rewards.append(reward)
-    
+
     # After done, render last state
     env.render()
 
@@ -69,6 +71,7 @@ def main():
     print("Episode reward: " + str(info["reward"]))
 
     env.close()
+
 
 if __name__ == "__main__":
     main()

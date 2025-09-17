@@ -11,7 +11,7 @@ class YamlParser:
 
     def __init__(self, path):
         """Loads and prepares the specified config file.
-        
+
         Arguments:
             path {str} -- Yaml file path to the to be loaded config file.
         """
@@ -19,7 +19,7 @@ class YamlParser:
         stream = open(path, "r")
         yaml = YAML()
         yaml_args = yaml.load_all(stream)
-        
+
         # Final contents of the config file will be added to a dictionary
         self._config = {}
 
@@ -28,7 +28,7 @@ class YamlParser:
             self._config = dict(data)
 
     def get_config(self):
-        """ 
+        """
         Returns:
             {dict} -- Nested dictionary that contains configs for the environment, model, evaluation and trainer.
         """

@@ -36,5 +36,6 @@ def main():
     trainer.run_training()
     trainer.close()
 
+
 if __name__ == "__main__":
     main()

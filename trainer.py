@@ -15,7 +15,9 @@ from worker import Worker
 
 
 class PPOTrainer:
-    def __init__(self, config:dict, run_id:str="run", device:torch.device=torch.device("cpu")) -> None:
+    def __init__(
+        self, config: dict, run_id: str = "run", device: torch.device = torch.device("cpu")
+    ) -> None:
         """Initializes all needed training components.
 
         Arguments:
@@ -47,11 +49,15 @@ class PPOTrainer:
 
         # Init buffer
         print("Step 2: Init buffer")
-        self.buffer = Buffer(self.config, self.observation_space, self.action_space_shape, self.device)
+        self.buffer = Buffer(
+            self.config, self.observation_space, self.action_space_shape, self.device
+        )
 
         # Init model
         print("Step 3: Init model and optimizer")
-        self.model = ActorCriticModel(self.config, self.observation_space, self.action_space_shape).to(self.device)
+        self.model = ActorCriticModel(
+            self.config, self.observation_space, self.action_space_shape
+        ).to(self.device)
         self.model.train()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr_schedule["initial"])
 
@@ -59,8 +65,10 @@ class PPOTrainer:
         print("Step 4: Init environment workers")
         self.workers = [Worker(self.config["environment"]) for w in range(self.config["n_workers"])]
 
-        # Setup observation placeholder   
-        self.obs = np.zeros((self.config["n_workers"],) + self.observation_space.shape, dtype=np.float32)
+        # Setup observation placeholder
+        self.obs = np.zeros(
+            (self.config["n_workers"],) + self.observation_space.shape, dtype=np.float32
+        )
 
         # Setup initial recurrent cell states (LSTM: tuple(tensor, tensor) or GRU: tensor)
         hxs, cxs = self.model.init_recurrent_cell_states(self.config["n_workers"], self.device)
@@ -85,9 +93,27 @@ class PPOTrainer:
 
         for update in range(self.config["updates"]):
             # Decay hyperparameters polynomially based on the provided config
-            learning_rate = polynomial_decay(self.lr_schedule["initial"], self.lr_schedule["final"], self.lr_schedule["max_decay_steps"], self.lr_schedule["power"], update)
-            beta = polynomial_decay(self.beta_schedule["initial"], self.beta_schedule["final"], self.beta_schedule["max_decay_steps"], self.beta_schedule["power"], update)
-            clip_range = polynomial_decay(self.cr_schedule["initial"], self.cr_schedule["final"], self.cr_schedule["max_decay_steps"], self.cr_schedule["power"], update)
+            learning_rate = polynomial_decay(
+                self.lr_schedule["initial"],
+                self.lr_schedule["final"],
+                self.lr_schedule["max_decay_steps"],
+                self.lr_schedule["power"],
+                update,
+            )
+            beta = polynomial_decay(
+                self.beta_schedule["initial"],
+                self.beta_schedule["final"],
+                self.beta_schedule["max_decay_steps"],
+                self.beta_schedule["power"],
+                update,
+            )
+            clip_range = polynomial_decay(
+                self.cr_schedule["initial"],
+                self.cr_schedule["final"],
+                self.cr_schedule["max_decay_steps"],
+                self.cr_schedule["power"],
+                update,
+            )
 
             # Sample training data
             sampled_episode_info = self._sample_training_data()
@@ -106,19 +132,40 @@ class PPOTrainer:
             # Print training statistics
             if "success_percent" in episode_result:
                 result = "{:4} reward={:.2f} std={:.2f} length={:.1f} std={:.2f} success = {:.2f} pi_loss={:3f} v_loss={:3f} entropy={:.3f} loss={:3f} value={:.3f} advantage={:.3f}".format(
-                    update, episode_result["reward_mean"], episode_result["reward_std"], episode_result["length_mean"], episode_result["length_std"], episode_result["success_percent"],
-                    training_stats[0], training_stats[1], training_stats[3], training_stats[2], torch.mean(self.buffer.values), torch.mean(self.buffer.advantages))
+                    update,
+                    episode_result["reward_mean"],
+                    episode_result["reward_std"],
+                    episode_result["length_mean"],
+                    episode_result["length_std"],
+                    episode_result["success_percent"],
+                    training_stats[0],
+                    training_stats[1],
+                    training_stats[3],
+                    training_stats[2],
+                    torch.mean(self.buffer.values),
+                    torch.mean(self.buffer.advantages),
+                )
             else:
                 result = "{:4} reward={:.2f} std={:.2f} length={:.1f} std={:.2f} pi_loss={:3f} v_loss={:3f} entropy={:.3f} loss={:3f} value={:.3f} advantage={:.3f}".format(
-                    update, episode_result["reward_mean"], episode_result["reward_std"], episode_result["length_mean"], episode_result["length_std"], 
-                    training_stats[0], training_stats[1], training_stats[3], training_stats[2], torch.mean(self.buffer.values), torch.mean(self.buffer.advantages))
+                    update,
+                    episode_result["reward_mean"],
+                    episode_result["reward_std"],
+                    episode_result["length_mean"],
+                    episode_result["length_std"],
+                    training_stats[0],
+                    training_stats[1],
+                    training_stats[3],
+                    training_stats[2],
+                    torch.mean(self.buffer.values),
+                    torch.mean(self.buffer.advantages),
+                )
             print(result)
 
             # Write training statistics to tensorboard
             self._write_training_summary(update, training_stats, episode_result)
-            
+
             # Free memory
-            del(self.buffer.samples_flat)
+            del self.buffer.samples_flat
             if self.device.type == "cuda":
                 torch.cuda.empty_cache()
 
@@ -145,7 +192,9 @@ class PPOTrainer:
                     self.buffer.cxs[:, t] = self.recurrent_cell[1].squeeze(0)
 
                 # Forward the model to retrieve the policy, the states' value and the recurrent cell states
-                policy, value, self.recurrent_cell = self.model(torch.tensor(self.obs), self.recurrent_cell, self.device)
+                policy, value, self.recurrent_cell = self.model(
+                    torch.tensor(self.obs), self.recurrent_cell, self.device
+                )
                 self.buffer.values[:, t] = value
 
                 # Sample actions from each individual policy branch
@@ -183,21 +232,21 @@ class PPOTrainer:
                             self.recurrent_cell[1][:, w] = cxs
                 # Store latest observations
                 self.obs[w] = obs
-                            
+
         # Calculate advantages
         _, last_value, _ = self.model(torch.tensor(self.obs), self.recurrent_cell, self.device)
         self.buffer.calc_advantages(last_value, self.config["gamma"], self.config["lamda"])
 
         return episode_infos
 
-    def _train_epochs(self, learning_rate:float, clip_range:float, beta:float) -> list:
+    def _train_epochs(self, learning_rate: float, clip_range: float, beta: float) -> list:
         """Trains several PPO epochs over one batch of data while dividing the batch into mini batches.
-        
+
         Arguments:
             learning_rate {float} -- The current learning rate
             clip_range {float} -- The current clip range
             beta {float} -- The current entropy bonus coefficient
-            
+
         Returns:
             {list} -- Training statistics of one training epoch"""
         train_info = []
@@ -205,10 +254,14 @@ class PPOTrainer:
             # Retrieve the to be trained mini batches via a generator
             mini_batch_generator = self.buffer.recurrent_mini_batch_generator()
             for mini_batch in mini_batch_generator:
-                train_info.append(self._train_mini_batch(mini_batch, learning_rate, clip_range, beta))
+                train_info.append(
+                    self._train_mini_batch(mini_batch, learning_rate, clip_range, beta)
+                )
         return train_info
 
-    def _train_mini_batch(self, samples:dict, learning_rate:float, clip_range:float, beta:float) -> list:
+    def _train_mini_batch(
+        self, samples: dict, learning_rate: float, clip_range: float, beta: float
+    ) -> list:
         """Uses one mini batch to optimize the model.
 
         Arguments:
@@ -227,8 +280,10 @@ class PPOTrainer:
             recurrent_cell = (samples["hxs"].unsqueeze(0), samples["cxs"].unsqueeze(0))
 
         # Forward model
-        policy, value, _ = self.model(samples["obs"], recurrent_cell, self.device, self.buffer.actual_sequence_length)
-        
+        policy, value, _ = self.model(
+            samples["obs"], recurrent_cell, self.device, self.buffer.actual_sequence_length
+        )
+
         # Policy Loss
         # Retrieve and process log_probs from each policy branch
         log_probs, entropies = [], []
@@ -237,15 +292,19 @@ class PPOTrainer:
             entropies.append(policy_branch.entropy())
         log_probs = torch.stack(log_probs, dim=1)
         entropies = torch.stack(entropies, dim=1).sum(1).reshape(-1)
-        
+
         # Remove paddings
         value = value[samples["loss_mask"]]
         log_probs = log_probs[samples["loss_mask"]]
-        entropies = entropies[samples["loss_mask"]] 
+        entropies = entropies[samples["loss_mask"]]
 
         # Compute policy surrogates to establish the policy loss
-        normalized_advantage = (samples["advantages"] - samples["advantages"].mean()) / (samples["advantages"].std() + 1e-8)
-        normalized_advantage = normalized_advantage.unsqueeze(1).repeat(1, len(self.action_space_shape)) # Repeat is necessary for multi-discrete action spaces
+        normalized_advantage = (samples["advantages"] - samples["advantages"].mean()) / (
+            samples["advantages"].std() + 1e-8
+        )
+        normalized_advantage = normalized_advantage.unsqueeze(1).repeat(
+            1, len(self.action_space_shape)
+        )  # Repeat is necessary for multi-discrete action spaces
         ratio = torch.exp(log_probs - samples["log_probs"])
         surr1 = ratio * normalized_advantage
         surr2 = torch.clamp(ratio, 1.0 - clip_range, 1.0 + clip_range) * normalized_advantage
@@ -254,7 +313,9 @@ class PPOTrainer:
 
         # Value  function loss
         sampled_return = samples["values"] + samples["advantages"]
-        clipped_value = samples["values"] + (value - samples["values"]).clamp(min=-clip_range, max=clip_range)
+        clipped_value = samples["values"] + (value - samples["values"]).clamp(
+            min=-clip_range, max=clip_range
+        )
         vf_loss = torch.max((value - sampled_return) ** 2, (clipped_value - sampled_return) ** 2)
         vf_loss = vf_loss.mean()
 
@@ -262,20 +323,26 @@ class PPOTrainer:
         entropy_bonus = entropies.mean()
 
         # Complete loss
-        loss = -(policy_loss - self.config["value_loss_coefficient"] * vf_loss + beta * entropy_bonus)
+        loss = -(
+            policy_loss - self.config["value_loss_coefficient"] * vf_loss + beta * entropy_bonus
+        )
 
         # Compute gradients
         for pg in self.optimizer.param_groups:
             pg["lr"] = learning_rate
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.config["max_grad_norm"])
+        torch.nn.utils.clip_grad_norm_(
+            self.model.parameters(), max_norm=self.config["max_grad_norm"]
+        )
         self.optimizer.step()
 
-        return [policy_loss.cpu().data.numpy(),
-                vf_loss.cpu().data.numpy(),
-                loss.cpu().data.numpy(),
-                entropy_bonus.cpu().data.numpy()]
+        return [
+            policy_loss.cpu().data.numpy(),
+            vf_loss.cpu().data.numpy(),
+            loss.cpu().data.numpy(),
+            entropy_bonus.cpu().data.numpy(),
+        ]
 
     def _write_training_summary(self, update, training_stats, episode_result) -> None:
         """Writes to an event file based on the run-id argument.
@@ -295,10 +362,12 @@ class PPOTrainer:
         self.writer.add_scalar("losses/entropy", training_stats[3], update)
         self.writer.add_scalar("training/sequence_length", self.buffer.true_sequence_length, update)
         self.writer.add_scalar("training/value_mean", torch.mean(self.buffer.values), update)
-        self.writer.add_scalar("training/advantage_mean", torch.mean(self.buffer.advantages), update)
+        self.writer.add_scalar(
+            "training/advantage_mean", torch.mean(self.buffer.advantages), update
+        )
 
     @staticmethod
-    def _process_episode_info(episode_info:list) -> dict:
+    def _process_episode_info(episode_info: list) -> dict:
         """Extracts the mean and std of completed episode statistics like length and total reward.
 
         Arguments:
@@ -323,7 +392,9 @@ class PPOTrainer:
         if not os.path.exists("./models"):
             os.makedirs("./models")
         self.model.cpu()
-        pickle.dump((self.model.state_dict(), self.config), open("./models/" + self.run_id + ".nn", "wb"))
+        pickle.dump(
+            (self.model.state_dict(), self.config), open("./models/" + self.run_id + ".nn", "wb")
+        )
         print("Model saved to " + "./models/" + self.run_id + ".nn")
 
     def close(self) -> None:

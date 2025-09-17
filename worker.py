@@ -4,9 +4,9 @@ import multiprocessing.connection
 from utils import create_env
 
 
-def worker_process(remote: multiprocessing.connection.Connection, config:dict) -> None:
+def worker_process(remote: multiprocessing.connection.Connection, config: dict) -> None:
     """Executes the threaded interface to the environment.
-    
+
     Arguments:
         remote {multiprocessing.connection.Connection} -- Parent thread
         config {dict} -- Configuration of the training environment
@@ -34,12 +34,14 @@ def worker_process(remote: multiprocessing.connection.Connection, config:dict) -
         except Exception as e:
             raise WorkerException(e)
 
+
 class Worker:
     """A worker that runs one environment on one process."""
+
     child: multiprocessing.connection.Connection
     process: multiprocessing.Process
-    
-    def __init__(self, env_config:dict):
+
+    def __init__(self, env_config: dict):
         """
         Arguments:
             env_config {dict} -- Configuration of the training environment
@@ -47,6 +49,7 @@ class Worker:
         self.child, parent = multiprocessing.Pipe()
         self.process = multiprocessing.Process(target=worker_process, args=(parent, env_config))
         self.process.start()
+
 
 import tblib.pickling_support
 
@@ -56,9 +59,10 @@ import sys
 
 class WorkerException(Exception):
     """Exception that is raised in the worker process and re-raised in the main process."""
+
     def __init__(self, ee):
         self.ee = ee
-        __,  __, self.tb = sys.exc_info()
+        __, __, self.tb = sys.exc_info()
         super(WorkerException, self).__init__(str(ee))
 
     def re_raise(self):

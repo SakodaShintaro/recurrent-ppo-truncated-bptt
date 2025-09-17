@@ -41,7 +41,7 @@ def main():
     model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
-    
+
     # Run and render episode
     done = False
     episode_rewards = []
@@ -65,14 +65,15 @@ def main():
         # Step environemnt
         obs, reward, done, info = env.step(int(action))
         episode_rewards.append(reward)
-    
+
     images.append(env.render())
     print("Episode length: " + str(info["length"]))
     print("Episode reward: " + str(info["reward"]))
-    
-    imageio.mimsave('results/minigrid_gif/MiniGrid.gif', images, fps=1)
+
+    imageio.mimsave("results/minigrid_gif/MiniGrid.gif", images, fps=1)
 
     env.close()
+
 
 if __name__ == "__main__":
     main()
