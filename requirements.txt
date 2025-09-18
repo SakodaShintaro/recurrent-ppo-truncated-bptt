@@ -1,4 +1,5 @@
 docopt==0.6.2
+einops
 gymnasium
 matplotlib
 memory-gym
