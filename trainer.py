@@ -74,7 +74,9 @@ class PPOTrainer:
         hxs, cxs = self.model.init_recurrent_cell_states(self.config["n_workers"], self.device)
         if self.recurrence["layer_type"] == "transformer":
             # Create dummy recurrent cell for transformer (keeps existing code working)
-            self.recurrent_cell = torch.zeros(1, self.config["n_workers"], self.recurrence["hidden_state_size"]).to(self.device)
+            self.recurrent_cell = torch.zeros(
+                1, self.config["n_workers"], self.recurrence["hidden_state_size"]
+            ).to(self.device)
         elif self.recurrence["layer_type"] == "gru":
             self.recurrent_cell = hxs
         elif self.recurrence["layer_type"] == "lstm":

@@ -59,11 +59,13 @@ class ActorCriticModel(nn.Module):
                 "positional_encoding": "learned",
                 "layer_norm": "pre",
                 "gtrxl": False,
-                "gtrxl_bias": 2.0
+                "gtrxl_bias": 2.0,
             }
 
             # Transformer blocks
-            self.transformer = Transformer(transformer_config, self.memory_layer_size, 1000)  # max_episode_length
+            self.transformer = Transformer(
+                transformer_config, self.memory_layer_size, 1000
+            )  # max_episode_length
             memory_output_size = self.memory_layer_size
         else:
             # Recurrent layer (GRU or LSTM)
@@ -156,11 +158,19 @@ class ActorCriticModel(nn.Module):
             h = F.relu(self.lin_hidden(h))
             # Forward transformer blocks
             # For simplicity, use dummy parameters for transformer forward
-            dummy_memories = torch.zeros(h.size(0), self.recurrence["sequence_length"], 3, 256).to(h.device)
-            dummy_mask = torch.ones(h.size(0), self.recurrence["sequence_length"], dtype=torch.bool).to(h.device)
-            dummy_memory_indices = torch.zeros(h.size(0), self.recurrence["sequence_length"], dtype=torch.long).to(h.device)
+            dummy_memories = torch.zeros(h.size(0), self.recurrence["sequence_length"], 3, 256).to(
+                h.device
+            )
+            dummy_mask = torch.ones(
+                h.size(0), self.recurrence["sequence_length"], dtype=torch.bool
+            ).to(h.device)
+            dummy_memory_indices = torch.zeros(
+                h.size(0), self.recurrence["sequence_length"], dtype=torch.long
+            ).to(h.device)
 
-            h, updated_memories = self.transformer(h, dummy_memories, dummy_mask, dummy_memory_indices)
+            h, updated_memories = self.transformer(
+                h, dummy_memories, dummy_mask, dummy_memory_indices
+            )
             memory_out = recurrent_cell  # Keep dummy recurrent_cell for compatibility
         else:
             # Forward recurrent layer (GRU or LSTM) first, then hidden layer
