@@ -72,7 +72,10 @@ class PPOTrainer:
 
         # Setup initial recurrent cell states (LSTM: tuple(tensor, tensor) or GRU: tensor)
         hxs, cxs = self.model.init_recurrent_cell_states(self.config["n_workers"], self.device)
-        if self.recurrence["layer_type"] == "gru":
+        if self.recurrence["layer_type"] == "transformer":
+            # Create dummy recurrent cell for transformer (keeps existing code working)
+            self.recurrent_cell = torch.zeros(1, self.config["n_workers"], self.recurrence["hidden_state_size"]).to(self.device)
+        elif self.recurrence["layer_type"] == "gru":
             self.recurrent_cell = hxs
         elif self.recurrence["layer_type"] == "lstm":
             self.recurrent_cell = (hxs, cxs)
@@ -180,9 +183,12 @@ class PPOTrainer:
         for t in range(self.config["worker_steps"]):
             # Gradients can be omitted for sampling training data
             with torch.no_grad():
-                # Save the initial observations and recurrentl cell states
+                # Save the initial observations and recurrent cell states
                 self.buffer.obs[:, t] = torch.tensor(self.obs)
-                if self.recurrence["layer_type"] == "gru":
+                if self.recurrence["layer_type"] == "transformer":
+                    # Save dummy cell states for transformer (keeps existing code working)
+                    self.buffer.hxs[:, t] = self.recurrent_cell.squeeze(0)
+                elif self.recurrence["layer_type"] == "gru":
                     self.buffer.hxs[:, t] = self.recurrent_cell.squeeze(0)
                 elif self.recurrence["layer_type"] == "lstm":
                     self.buffer.hxs[:, t] = self.recurrent_cell[0].squeeze(0)
@@ -271,7 +277,9 @@ class PPOTrainer:
             {list} -- list of trainig statistics (e.g. loss)
         """
         # Retrieve sampled recurrent cell states to feed the model
-        if self.recurrence["layer_type"] == "gru":
+        if self.recurrence["layer_type"] == "transformer":
+            recurrent_cell = samples["hxs"].unsqueeze(0)  # Use dummy cell for compatibility
+        elif self.recurrence["layer_type"] == "gru":
             recurrent_cell = samples["hxs"].unsqueeze(0)
         elif self.recurrence["layer_type"] == "lstm":
             recurrent_cell = (samples["hxs"].unsqueeze(0), samples["cxs"].unsqueeze(0))
