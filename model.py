@@ -100,10 +100,7 @@ class ActorCriticModel(nn.Module):
         self,
         obs: torch.tensor,
         recurrent_cell: torch.tensor = None,
-        device: torch.device = None,
         sequence_length: int = 1,
-        memory_mask: torch.tensor = None,
-        memory_indices: torch.tensor = None,
     ):
         """Forward pass of the model
 

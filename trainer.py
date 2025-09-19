@@ -198,7 +198,7 @@ class PPOTrainer:
 
                 # Forward the model to retrieve the policy, the states' value and the recurrent cell states
                 policy, value, self.recurrent_cell = self.model(
-                    torch.tensor(self.obs), self.recurrent_cell, self.device
+                    torch.tensor(self.obs), self.recurrent_cell
                 )
                 self.buffer.values[:, t] = value
 
@@ -239,7 +239,7 @@ class PPOTrainer:
                 self.obs[w] = obs
 
         # Calculate advantages
-        _, last_value, _ = self.model(torch.tensor(self.obs), self.recurrent_cell, self.device)
+        _, last_value, _ = self.model(torch.tensor(self.obs), self.recurrent_cell)
         self.buffer.calc_advantages(last_value, self.config["gamma"], self.config["td_lambda"])
 
         return episode_infos
@@ -288,7 +288,7 @@ class PPOTrainer:
 
         # Forward model
         policy, value, _ = self.model(
-            samples["obs"], recurrent_cell, self.device, self.buffer.actual_sequence_length
+            samples["obs"], recurrent_cell, self.buffer.actual_sequence_length
         )
 
         # Policy Loss
