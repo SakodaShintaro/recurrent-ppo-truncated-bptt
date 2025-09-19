@@ -21,6 +21,10 @@ class ActorCriticModel(nn.Module):
         self.recurrence = config["recurrence"]
         self.observation_space_shape = observation_space.shape
 
+        self.layer_type = self.recurrence["layer_type"]
+        self.hidden_state_size = self.recurrence["hidden_state_size"]
+        self.sequence_length = self.recurrence["sequence_length"]
+
         # Observation encoder
         if len(self.observation_space_shape) > 1:
             # Case: visual observation is available
@@ -44,18 +48,17 @@ class ActorCriticModel(nn.Module):
             in_features_next_layer = observation_space.shape[0]
 
         # Memory layer (GRU, LSTM, or Transformer)
-        if self.recurrence["layer_type"] == "transformer":
+        if self.layer_type == "transformer":
             # Transformer setup with default settings
-            self.memory_layer_size = self.recurrence["hidden_state_size"]
-            self.lin_hidden = nn.Linear(in_features_next_layer, self.memory_layer_size)
+            self.lin_hidden = nn.Linear(in_features_next_layer, self.hidden_state_size)
             nn.init.orthogonal_(self.lin_hidden.weight, np.sqrt(2))
 
             # Create transformer config using existing recurrence settings
             transformer_config = {
                 "num_blocks": 3,
-                "embed_dim": self.memory_layer_size,
+                "embed_dim": self.hidden_state_size,
                 "num_heads": 8,
-                "memory_length": self.recurrence["sequence_length"],  # Use sequence_length
+                "memory_length": self.sequence_length,
                 "positional_encoding": "learned",
                 "layer_norm": "pre",
                 "gtrxl": False,
@@ -64,17 +67,17 @@ class ActorCriticModel(nn.Module):
 
             # Transformer blocks
             self.transformer = Transformer(
-                transformer_config, self.memory_layer_size, 1000
+                transformer_config, self.hidden_state_size, 1000
             )  # max_episode_length
         else:
             # Recurrent layer (GRU or LSTM)
-            if self.recurrence["layer_type"] == "gru":
+            if self.layer_type == "gru":
                 self.recurrent_layer = nn.GRU(
-                    in_features_next_layer, self.recurrence["hidden_state_size"], batch_first=True
+                    in_features_next_layer, self.hidden_state_size, batch_first=True
                 )
-            elif self.recurrence["layer_type"] == "lstm":
+            elif self.layer_type == "lstm":
                 self.recurrent_layer = nn.LSTM(
-                    in_features_next_layer, self.recurrence["hidden_state_size"], batch_first=True
+                    in_features_next_layer, self.hidden_state_size, batch_first=True
                 )
             # Init recurrent layer
             for name, param in self.recurrent_layer.named_parameters():
@@ -84,11 +87,11 @@ class ActorCriticModel(nn.Module):
                     nn.init.orthogonal_(param, np.sqrt(2))
 
             # Hidden layer
-            self.lin_hidden = nn.Linear(self.recurrence["hidden_state_size"], self.hidden_size)
+            self.lin_hidden = nn.Linear(self.hidden_state_size, self.hidden_size)
             nn.init.orthogonal_(self.lin_hidden.weight, np.sqrt(2))
 
         # Decouple policy from value
-        if self.recurrence["layer_type"] == "transformer":
+        if self.layer_type == "transformer":
             # Hidden layer of the policy (transformer)
             self.lin_policy = nn.Linear(self.memory_layer_size, self.hidden_size)
             nn.init.orthogonal_(self.lin_policy.weight, np.sqrt(2))
@@ -151,19 +154,19 @@ class ActorCriticModel(nn.Module):
             # Flatten the output of the convolutional layers
             h = h.reshape((batch_size, -1))
 
-        if self.recurrence["layer_type"] == "transformer":
+        if self.layer_type == "transformer":
             # Feed hidden layer for transformer
             h = F.relu(self.lin_hidden(h))
             # Forward transformer blocks
             # For simplicity, use dummy parameters for transformer forward
-            dummy_memories = torch.zeros(h.size(0), self.recurrence["sequence_length"], 3, 256).to(
+            dummy_memories = torch.zeros(h.size(0), self.sequence_length, 3, 256).to(
                 h.device
             )
             dummy_mask = torch.ones(
-                h.size(0), self.recurrence["sequence_length"], dtype=torch.bool
+                h.size(0), self.sequence_length, dtype=torch.bool
             ).to(h.device)
             dummy_memory_indices = torch.zeros(
-                h.size(0), self.recurrence["sequence_length"], dtype=torch.long
+                h.size(0), self.sequence_length, dtype=torch.long
             ).to(h.device)
 
             h, updated_memories = self.transformer(
@@ -230,21 +233,21 @@ class ActorCriticModel(nn.Module):
             {tuple} -- Depending on the used recurrent layer type, just hidden states (gru) or both hidden states and
                      cell states are returned using initial values.
         """
-        if self.recurrence["layer_type"] == "transformer":
+        if self.layer_type == "transformer":
             # For transformer, return None as memory is handled differently
             return None, None
 
         hxs = torch.zeros(
             (num_sequences),
-            self.recurrence["hidden_state_size"],
+            self.hidden_state_size,
             dtype=torch.float32,
             device=device,
         ).unsqueeze(0)
         cxs = None
-        if self.recurrence["layer_type"] == "lstm":
+        if self.layer_type == "lstm":
             cxs = torch.zeros(
                 (num_sequences),
-                self.recurrence["hidden_state_size"],
+                self.hidden_state_size,
                 dtype=torch.float32,
                 device=device,
             ).unsqueeze(0)

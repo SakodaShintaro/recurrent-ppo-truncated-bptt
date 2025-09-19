@@ -14,7 +14,7 @@ def main():
     Usage:
         enjoy.py [options]
         enjoy.py --help
-    
+
     Options:
         --model=<path>              Specifies the path to the trained model [default: ./models/minigrid.nn].
     """
