@@ -76,22 +76,13 @@ class ActorCriticModel(nn.Module):
         nn.init.orthogonal_(self.lin_hidden_out.weight, np.sqrt(2))
 
         # Decouple policy from value
-        if self.layer_type == "transformer":
-            # Hidden layer of the policy (transformer)
-            self.lin_policy = nn.Linear(self.hidden_size, self.hidden_size)
-            nn.init.orthogonal_(self.lin_policy.weight, np.sqrt(2))
+        # Hidden layer of the policy
+        self.lin_policy = nn.Linear(self.hidden_size, self.hidden_size)
+        nn.init.orthogonal_(self.lin_policy.weight, np.sqrt(2))
 
-            # Hidden layer of the value function (transformer)
-            self.lin_value = nn.Linear(self.hidden_state_size, self.hidden_size)
-            nn.init.orthogonal_(self.lin_value.weight, np.sqrt(2))
-        else:
-            # Hidden layer of the policy (recurrent)
-            self.lin_policy = nn.Linear(self.hidden_size, self.hidden_size)
-            nn.init.orthogonal_(self.lin_policy.weight, np.sqrt(2))
-
-            # Hidden layer of the value function (recurrent)
-            self.lin_value = nn.Linear(self.hidden_size, self.hidden_size)
-            nn.init.orthogonal_(self.lin_value.weight, np.sqrt(2))
+        # Hidden layer of the value function
+        self.lin_value = nn.Linear(self.hidden_size, self.hidden_size)
+        nn.init.orthogonal_(self.lin_value.weight, np.sqrt(2))
 
         # Outputs / Model heads
         # Policy (Multi-discrete categorical distribution)
@@ -144,11 +135,24 @@ class ActorCriticModel(nn.Module):
             # Feed hidden layer for transformer
             # Forward transformer blocks
             # For simplicity, use dummy parameters for transformer forward
-            dummy_memories = torch.zeros(h.size(0), self.sequence_length, 3, 256).to(h.device)
-            dummy_mask = torch.ones(h.size(0), self.sequence_length, dtype=torch.bool).to(h.device)
+            batch_size = h.size(0)
+            device = h.device
+            hidden_size = self.hidden_size
+            num_blocks = getattr(self, "transformer_num_blocks", self.transformer.num_blocks)
+
+            dummy_memories = torch.zeros(
+                batch_size,
+                self.sequence_length,
+                num_blocks,
+                hidden_size,
+                device=device,
+            )
+            dummy_mask = torch.ones(
+                batch_size, self.sequence_length, dtype=torch.bool, device=device
+            )
             dummy_memory_indices = torch.zeros(
-                h.size(0), self.sequence_length, dtype=torch.long
-            ).to(h.device)
+                batch_size, self.sequence_length, dtype=torch.long, device=device
+            )
 
             h, updated_memories = self.transformer(
                 h, dummy_memories, dummy_mask, dummy_memory_indices
