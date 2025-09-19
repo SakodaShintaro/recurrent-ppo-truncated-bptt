@@ -8,4 +8,8 @@ protobuf==3.20.3
 reprint==0.6.0
 ruamel.yaml
 tblib
-tensorboard==2.0.2
+torch
+torchvision
+torchaudio
+numpy<2.0
+tensorboard>=2.16.0
