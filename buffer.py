@@ -27,7 +27,7 @@ class Buffer:
         self.n_mini_batches = config["n_mini_batch"]
         self.batch_size = self.n_workers * self.worker_steps
         self.mini_batch_size = self.batch_size // self.n_mini_batches
-        hidden_state_size = config["recurrence"]["hidden_state_size"]
+        hidden_size = config["hidden_size"]
         self.layer_type = config["recurrence"]["layer_type"]
         self.sequence_length = config["recurrence"]["sequence_length"]
         self.true_sequence_length = 0
@@ -39,8 +39,8 @@ class Buffer:
         )
         self.dones = np.zeros((self.n_workers, self.worker_steps), dtype=bool)
         self.obs = torch.zeros((self.n_workers, self.worker_steps) + observation_space.shape)
-        self.hxs = torch.zeros((self.n_workers, self.worker_steps, hidden_state_size))
-        self.cxs = torch.zeros((self.n_workers, self.worker_steps, hidden_state_size))
+        self.hxs = torch.zeros((self.n_workers, self.worker_steps, hidden_size))
+        self.cxs = torch.zeros((self.n_workers, self.worker_steps, hidden_size))
         self.log_probs = torch.zeros((self.n_workers, self.worker_steps, len(action_space_shape)))
         self.values = torch.zeros((self.n_workers, self.worker_steps))
         self.advantages = torch.zeros((self.n_workers, self.worker_steps))

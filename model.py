@@ -17,46 +17,35 @@ class ActorCriticModel(nn.Module):
             action_space_shape {tuple} -- Dimensions of the action space
         """
         super().__init__()
-        self.hidden_size = config["hidden_layer_size"]
+        self.hidden_size = config["hidden_size"]
         self.recurrence = config["recurrence"]
         self.observation_space_shape = observation_space.shape
 
         self.layer_type = self.recurrence["layer_type"]
-        self.hidden_state_size = self.recurrence["hidden_state_size"]
         self.sequence_length = self.recurrence["sequence_length"]
 
         # Observation encoder
-        if len(self.observation_space_shape) > 1:
-            # Case: visual observation is available
-            # Visual encoder made of 3 convolutional layers
-            self.conv1 = nn.Conv2d(
-                observation_space.shape[0],
-                32,
-                8,
-                4,
-            )
-            self.conv2 = nn.Conv2d(32, 64, 4, 2, 0)
-            self.conv3 = nn.Conv2d(64, 64, 3, 1, 0)
-            nn.init.orthogonal_(self.conv1.weight, np.sqrt(2))
-            nn.init.orthogonal_(self.conv2.weight, np.sqrt(2))
-            nn.init.orthogonal_(self.conv3.weight, np.sqrt(2))
-            # Compute output size of convolutional layers
-            self.conv_out_size = self.get_conv_output(observation_space.shape)
-            in_features_next_layer = self.conv_out_size
-        else:
-            # Case: vector observation is available
-            in_features_next_layer = observation_space.shape[0]
+        # Visual encoder made of 3 convolutional layers
+        self.conv1 = nn.Conv2d(observation_space.shape[0], 32, 8, 4)
+        self.conv2 = nn.Conv2d(32, 64, 4, 2, 0)
+        self.conv3 = nn.Conv2d(64, 64, 3, 1, 0)
+        nn.init.orthogonal_(self.conv1.weight, np.sqrt(2))
+        nn.init.orthogonal_(self.conv2.weight, np.sqrt(2))
+        nn.init.orthogonal_(self.conv3.weight, np.sqrt(2))
+        # Compute output size of convolutional layers
+        in_features_next_layer = self.get_conv_output(observation_space.shape)
+
+        self.lin_hidden_in = nn.Linear(in_features_next_layer, self.hidden_size)
+        nn.init.orthogonal_(self.lin_hidden_in.weight, np.sqrt(2))
 
         # Memory layer (GRU, LSTM, or Transformer)
         if self.layer_type == "transformer":
             # Transformer setup with default settings
-            self.lin_hidden = nn.Linear(in_features_next_layer, self.hidden_state_size)
-            nn.init.orthogonal_(self.lin_hidden.weight, np.sqrt(2))
 
             # Create transformer config using existing recurrence settings
             transformer_config = {
                 "num_blocks": 3,
-                "embed_dim": self.hidden_state_size,
+                "embed_dim": self.hidden_size,
                 "num_heads": 8,
                 "memory_length": self.sequence_length,
                 "positional_encoding": "learned",
@@ -67,18 +56,14 @@ class ActorCriticModel(nn.Module):
 
             # Transformer blocks
             self.transformer = Transformer(
-                transformer_config, self.hidden_state_size, 1000
+                transformer_config, self.hidden_size, 1000
             )  # max_episode_length
         else:
             # Recurrent layer (GRU or LSTM)
             if self.layer_type == "gru":
-                self.recurrent_layer = nn.GRU(
-                    in_features_next_layer, self.hidden_state_size, batch_first=True
-                )
+                self.recurrent_layer = nn.GRU(self.hidden_size, self.hidden_size, batch_first=True)
             elif self.layer_type == "lstm":
-                self.recurrent_layer = nn.LSTM(
-                    in_features_next_layer, self.hidden_state_size, batch_first=True
-                )
+                self.recurrent_layer = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=True)
             # Init recurrent layer
             for name, param in self.recurrent_layer.named_parameters():
                 if "bias" in name:
@@ -86,18 +71,18 @@ class ActorCriticModel(nn.Module):
                 elif "weight" in name:
                     nn.init.orthogonal_(param, np.sqrt(2))
 
-            # Hidden layer
-            self.lin_hidden = nn.Linear(self.hidden_state_size, self.hidden_size)
-            nn.init.orthogonal_(self.lin_hidden.weight, np.sqrt(2))
+        # Hidden layer
+        self.lin_hidden_out = nn.Linear(self.hidden_size, self.hidden_size)
+        nn.init.orthogonal_(self.lin_hidden_out.weight, np.sqrt(2))
 
         # Decouple policy from value
         if self.layer_type == "transformer":
             # Hidden layer of the policy (transformer)
-            self.lin_policy = nn.Linear(self.memory_layer_size, self.hidden_size)
+            self.lin_policy = nn.Linear(self.hidden_size, self.hidden_size)
             nn.init.orthogonal_(self.lin_policy.weight, np.sqrt(2))
 
             # Hidden layer of the value function (transformer)
-            self.lin_value = nn.Linear(self.memory_layer_size, self.hidden_size)
+            self.lin_value = nn.Linear(self.hidden_state_size, self.hidden_size)
             nn.init.orthogonal_(self.lin_value.weight, np.sqrt(2))
         else:
             # Hidden layer of the policy (recurrent)
@@ -145,26 +130,22 @@ class ActorCriticModel(nn.Module):
         # Set observation as input to the model
         h = obs
         # Forward observation encoder
-        if len(self.observation_space_shape) > 1:
-            batch_size = h.size()[0]
-            # Propagate input through the visual encoder
-            h = F.relu(self.conv1(h))
-            h = F.relu(self.conv2(h))
-            h = F.relu(self.conv3(h))
-            # Flatten the output of the convolutional layers
-            h = h.reshape((batch_size, -1))
+        batch_size = h.size()[0]
+        # Propagate input through the visual encoder
+        h = F.relu(self.conv1(h))
+        h = F.relu(self.conv2(h))
+        h = F.relu(self.conv3(h))
+        # Flatten the output of the convolutional layers
+        h = h.reshape((batch_size, -1))
+
+        h = F.relu(self.lin_hidden_in(h))
 
         if self.layer_type == "transformer":
             # Feed hidden layer for transformer
-            h = F.relu(self.lin_hidden(h))
             # Forward transformer blocks
             # For simplicity, use dummy parameters for transformer forward
-            dummy_memories = torch.zeros(h.size(0), self.sequence_length, 3, 256).to(
-                h.device
-            )
-            dummy_mask = torch.ones(
-                h.size(0), self.sequence_length, dtype=torch.bool
-            ).to(h.device)
+            dummy_memories = torch.zeros(h.size(0), self.sequence_length, 3, 256).to(h.device)
+            dummy_mask = torch.ones(h.size(0), self.sequence_length, dtype=torch.bool).to(h.device)
             dummy_memory_indices = torch.zeros(
                 h.size(0), self.sequence_length, dtype=torch.long
             ).to(h.device)
@@ -193,7 +174,7 @@ class ActorCriticModel(nn.Module):
                 h = h.reshape(h_shape[0] * h_shape[1], h_shape[2])
 
             # Feed hidden layer after recurrent layer
-            h = F.relu(self.lin_hidden(h))
+            h = F.relu(self.lin_hidden_out(h))
             memory_out = recurrent_cell
 
         # Decouple policy from value
@@ -239,7 +220,7 @@ class ActorCriticModel(nn.Module):
 
         hxs = torch.zeros(
             (num_sequences),
-            self.hidden_state_size,
+            self.hidden_size,
             dtype=torch.float32,
             device=device,
         ).unsqueeze(0)
@@ -247,7 +228,7 @@ class ActorCriticModel(nn.Module):
         if self.layer_type == "lstm":
             cxs = torch.zeros(
                 (num_sequences),
-                self.hidden_state_size,
+                self.hidden_size,
                 dtype=torch.float32,
                 device=device,
             ).unsqueeze(0)
