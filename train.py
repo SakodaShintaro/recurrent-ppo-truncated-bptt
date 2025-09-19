@@ -1,8 +1,21 @@
 import torch
 from docopt import docopt
+from ruamel.yaml import YAML
 
 from trainer import PPOTrainer
-from yaml_parser import YamlParser
+
+
+def _load_config(path: str) -> dict:
+    """Load the YAML config file and return its contents as a dict."""
+    yaml = YAML()
+    with open(path, "r", encoding="utf-8") as stream:
+        config = {}
+        for data in yaml.load_all(stream):
+            if data:
+                config = dict(data)
+    if not config:
+        raise ValueError(f"Config file '{path}' did not contain any data.")
+    return config
 
 
 def main():
@@ -11,7 +24,7 @@ def main():
     Usage:
         train.py [options]
         train.py --help
-    
+
     Options:
         --config=<path>            Path to the yaml config file [default: ./configs/cartpole.yaml]
         --run-id=<path>            Specifies the tag for saving the tensorboard summary [default: run].
@@ -21,7 +34,7 @@ def main():
     run_id = options["--run-id"]
     cpu = options["--cpu"]
     # Parse the yaml config file. The result is a dictionary, which is passed to the trainer.
-    config = YamlParser(options["--config"]).get_config()
+    config = _load_config(options["--config"])
 
     if not cpu:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
