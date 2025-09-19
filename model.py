@@ -66,7 +66,6 @@ class ActorCriticModel(nn.Module):
             self.transformer = Transformer(
                 transformer_config, self.memory_layer_size, 1000
             )  # max_episode_length
-            memory_output_size = self.memory_layer_size
         else:
             # Recurrent layer (GRU or LSTM)
             if self.recurrence["layer_type"] == "gru":
@@ -87,7 +86,6 @@ class ActorCriticModel(nn.Module):
             # Hidden layer
             self.lin_hidden = nn.Linear(self.recurrence["hidden_state_size"], self.hidden_size)
             nn.init.orthogonal_(self.lin_hidden.weight, np.sqrt(2))
-            memory_output_size = self.hidden_size
 
         # Decouple policy from value
         if self.recurrence["layer_type"] == "transformer":
