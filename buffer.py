@@ -75,7 +75,7 @@ class Buffer:
         episode_done_indices = []
         for w in range(self.n_workers):
             episode_done_indices.append(list(self.dones[w].nonzero()[0]))
-            # Append the index of the last element of a trajectory as well, as it "artifically" marks the end of an episode
+            # Append the index of the last element of a trajectory as well, as it "artificially" marks the end of an episode
             if (
                 len(episode_done_indices[w]) == 0
                 or episode_done_indices[w][-1] != self.worker_steps - 1
@@ -99,7 +99,7 @@ class Buffer:
             sequences, max_sequence_length = self._arange_sequences(value, episode_done_indices)
 
             # Apply zero-padding to ensure that each episode has the same length
-            # Therfore we can train batches of episodes in parallel instead of one episode at a time
+            # Therefore we can train batches of episodes in parallel instead of one episode at a time
             for i, sequence in enumerate(sequences):
                 sequences[i] = self._pad_sequence(sequence, max_sequence_length)
 
@@ -152,8 +152,8 @@ class Buffer:
         return torch.cat((sequence, padding), axis=0)
 
     def _arange_sequences(self, data, episode_done_indices):
-        """Splits the povided data into episodes and then into sequences.
-        The split points are indicated by the envrinoments' done signals.
+        """Splits the provided data into episodes and then into sequences.
+        The split points are indicated by the environments' done signals.
 
         Arguments:
             data {torch.tensor} -- The to be split data arrange into num_worker, worker_steps
@@ -181,7 +181,7 @@ class Buffer:
                 start_index = done_index + 1
         return sequences, max_length
 
-    def recurrent_mini_batch_generator(self) -> dict:
+    def recurrent_mini_batch_generator(self):
         """A recurrent generator that returns a dictionary containing the data of a whole minibatch.
         In comparison to the none-recurrent one, this generator maintains the sequences of the workers' experience trajectories.
 
@@ -230,13 +230,13 @@ class Buffer:
             start = end
             yield mini_batch
 
-    def calc_advantages(self, last_value: torch.tensor, gamma: float, lamda: float) -> None:
+    def calc_advantages(self, last_value: torch.tensor, gamma: float, td_lambda: float) -> None:
         """Generalized advantage estimation (GAE)
 
         Arguments:
             last_value {torch.tensor} -- Value of the last agent's state
             gamma {float} -- Discount factor
-            lamda {float} -- GAE regularization parameter
+            td_lambda {float} -- GAE regularization parameter
         """
         with torch.no_grad():
             last_advantage = 0
@@ -246,6 +246,6 @@ class Buffer:
                 last_value = last_value * mask[:, t]
                 last_advantage = last_advantage * mask[:, t]
                 delta = rewards[:, t] + gamma * last_value - self.values[:, t]
-                last_advantage = delta + gamma * lamda * last_advantage
+                last_advantage = delta + gamma * td_lambda * last_advantage
                 self.advantages[:, t] = last_advantage
                 last_value = self.values[:, t]

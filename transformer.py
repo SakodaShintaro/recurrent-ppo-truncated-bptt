@@ -111,8 +111,8 @@ class TransformerBlock(Module):
     def __init__(self, embed_dim, num_heads, config):
         """Transformer Block made of LayerNorms, Multi Head Attention and one fully connected feed forward projection.
         Arguments:
-            embed_dim {int} -- Size of the embeddding dimension
-            num_heads {int} -- Number of attention headds
+            embed_dim {int} -- Size of the embedding dimension
+            num_heads {int} -- Number of attention heads
             config {dict} -- General config
         """
         super(TransformerBlock, self).__init__()
@@ -238,7 +238,7 @@ class Transformer(nn.Module):
         elif config["positional_encoding"] == "learned":
             self.pos_embedding = nn.Parameter(
                 torch.randn(self.max_episode_steps, self.embed_dim)
-            )  # (batch size, max episoded steps, num layers, layer size)
+            )  # (batch size, max episode steps, num layers, layer size)
         else:
             pass  # No positional encoding is used
 
@@ -254,7 +254,7 @@ class Transformer(nn.Module):
         """
         Arguments:
             h {torch.tensor} -- Input (query)
-            memories {torch.tesnor} -- Whole episoded memories of shape (N, L, num blocks, D)
+            memories {torch.tensor} -- Whole episodic memories of shape (N, L, num blocks, D)
             mask {torch.tensor} -- Attention mask (dtype: bool) of shape (N, L)
             memory_indices {torch.tensor} -- Memory window indices (dtype: long) of shape (N, L)
         Returns:

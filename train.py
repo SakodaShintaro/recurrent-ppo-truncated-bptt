@@ -1,5 +1,4 @@
 import torch
-from docopt import docopt
 from ruamel.yaml import YAML
 
 from trainer import PPOTrainer
@@ -19,30 +18,12 @@ def _load_config(path: str) -> dict:
 
 
 def main():
-    # Command line arguments via docopt
-    _USAGE = """
-    Usage:
-        train.py [options]
-        train.py --help
-
-    Options:
-        --config=<path>            Path to the yaml config file [default: ./configs/cartpole.yaml]
-        --run-id=<path>            Specifies the tag for saving the tensorboard summary [default: run].
-        --cpu                      Force training on CPU [default: False]
-    """
-    options = docopt(_USAGE)
-    run_id = options["--run-id"]
-    cpu = options["--cpu"]
+    run_id = "run"
     # Parse the yaml config file. The result is a dictionary, which is passed to the trainer.
-    config = _load_config(options["--config"])
+    config = _load_config("./minigrid.yaml")
 
-    if not cpu:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        if torch.cuda.is_available():
-            torch.set_default_tensor_type("torch.cuda.FloatTensor")
-    else:
-        device = torch.device("cpu")
-        torch.set_default_tensor_type("torch.FloatTensor")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.set_default_tensor_type("torch.cuda.FloatTensor")
 
     # Initialize the PPO trainer and commence training
     trainer = PPOTrainer(config, run_id=run_id, device=device)

@@ -97,7 +97,7 @@ class PPOTrainer:
         episode_infos = deque(maxlen=100)
 
         for update in range(self.config["updates"]):
-            # Decay hyperparameters polynomially based on the provided config
+            # Decay hyperparameters
             learning_rate = polynomial_decay(
                 self.lr_schedule["initial"],
                 self.lr_schedule["final"],
@@ -240,7 +240,7 @@ class PPOTrainer:
 
         # Calculate advantages
         _, last_value, _ = self.model(torch.tensor(self.obs), self.recurrent_cell, self.device)
-        self.buffer.calc_advantages(last_value, self.config["gamma"], self.config["lamda"])
+        self.buffer.calc_advantages(last_value, self.config["gamma"], self.config["td_lambda"])
 
         return episode_infos
 
@@ -276,7 +276,7 @@ class PPOTrainer:
             beta {float} -- Current entropy bonus coefficient
 
         Returns:
-            {list} -- list of trainig statistics (e.g. loss)
+            {list} -- list of training statistics (e.g. loss)
         """
         # Retrieve sampled recurrent cell states to feed the model
         if self.recurrence["layer_type"] == "transformer":
