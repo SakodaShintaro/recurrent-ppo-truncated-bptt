@@ -107,7 +107,6 @@ class ActorCriticModel(nn.Module):
         Arguments:
             obs {torch.tensor} -- Batch of observations
             recurrent_cell {torch.tensor} -- Memory cell of the recurrent layer
-            device {torch.device} -- Current device
             sequence_length {int} -- Length of the fed sequences. Defaults to 1.
 
         Returns:
