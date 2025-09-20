@@ -1,7 +1,4 @@
-from environments.cartpole_env import CartPole
-from environments.memory_gym_env import MemoryGymWrapper
-from environments.minigrid_env import Minigrid
-from environments.poc_memory_env import PocMemoryEnv
+from minigrid_env import Minigrid
 
 
 def create_env(config: dict, render: bool = False):
@@ -13,18 +10,7 @@ def create_env(config: dict, render: bool = False):
     Returns:
         {env}: Returns the selected environment instance.
     """
-    if config["type"] == "PocMemoryEnv":
-        return PocMemoryEnv(glob=False, freeze=True)
-    if config["type"] == "CartPole":
-        return CartPole(mask_velocity=False)
-    if config["type"] == "CartPoleMasked":
-        return CartPole(mask_velocity=True, realtime_mode=render)
-    if config["type"] == "Minigrid":
-        return Minigrid(env_name=config["name"], realtime_mode=render)
-    if config["type"] == "MemoryGym":
-        return MemoryGymWrapper(
-            env_name=config["name"], reset_params=config["reset_params"], realtime_mode=render
-        )
+    return Minigrid(env_name=config["name"], realtime_mode=render)
 
 
 def polynomial_decay(
