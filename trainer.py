@@ -1,5 +1,4 @@
 import os
-import pickle
 import time
 from collections import deque
 
@@ -11,7 +10,6 @@ from torch.utils.tensorboard import SummaryWriter
 from buffer import Buffer
 from model import ActorCriticModel
 from utils import create_env, polynomial_decay
-from worker import Worker
 
 
 class PPOTrainer:
@@ -61,34 +59,26 @@ class PPOTrainer:
         self.model.train()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr_schedule["initial"])
 
-        # Init workers
-        print("Step 4: Init environment workers")
-        self.workers = [Worker(self.config["environment"]) for w in range(self.config["n_workers"])]
-
-        # Setup observation placeholder
-        self.obs = np.zeros(
-            (self.config["n_workers"],) + self.observation_space.shape, dtype=np.float32
-        )
+        # Init environment
+        print("Step 4: Init environment")
+        self.env = create_env(self.config["environment"])
 
         # Setup initial recurrent cell states (LSTM: tuple(tensor, tensor) or GRU: tensor)
-        hxs, cxs = self.model.init_recurrent_cell_states(self.config["n_workers"], self.device)
+        hxs, cxs = self.model.init_recurrent_cell_states(1, self.device)
         if self.recurrence["layer_type"] == "transformer":
             # Create dummy recurrent cell for transformer (keeps existing code working)
             self.recurrent_cell = torch.zeros(
-                1, self.config["n_workers"], self.config["hidden_size"]
-            ).to(self.device)
+                1, 1, self.config["hidden_size"], device=self.device
+            )
         elif self.recurrence["layer_type"] == "gru":
             self.recurrent_cell = hxs
         elif self.recurrence["layer_type"] == "lstm":
             self.recurrent_cell = (hxs, cxs)
 
-        # Reset workers (i.e. environments)
-        print("Step 5: Reset workers")
-        for worker in self.workers:
-            worker.child.send(("reset", None))
-        # Grab initial observations and store them in their respective placeholder location
-        for w, worker in enumerate(self.workers):
-            self.obs[w] = worker.child.recv()
+        # Reset environment
+        print("Step 5: Reset environment")
+        initial_obs = self.env.reset()
+        self.obs = np.asarray(initial_obs, dtype=np.float32)
 
     def run_training(self) -> None:
         """Runs the entire training logic from sampling data to optimizing the model."""
@@ -175,7 +165,7 @@ class PPOTrainer:
                 torch.cuda.empty_cache()
 
     def _sample_training_data(self) -> list:
-        """Runs all n workers for n steps to sample training data.
+        """Runs the environment for the configured number of steps to sample training data.
 
         Returns:
             {list} -- list of results of completed episodes.
@@ -185,22 +175,23 @@ class PPOTrainer:
         for t in range(self.config["worker_steps"]):
             # Gradients can be omitted for sampling training data
             with torch.no_grad():
-                # Save the initial observations and recurrent cell states
-                self.buffer.obs[:, t] = torch.tensor(self.obs)
+                obs_tensor = torch.tensor(self.obs, dtype=torch.float32)
+                self.buffer.obs[t] = obs_tensor.cpu()
+
+                current_cell = self.recurrent_cell
                 if self.recurrence["layer_type"] == "transformer":
-                    # Save dummy cell states for transformer (keeps existing code working)
-                    self.buffer.hxs[:, t] = self.recurrent_cell.squeeze(0)
+                    self.buffer.hxs[t] = current_cell.squeeze(0).squeeze(0).detach().cpu()
                 elif self.recurrence["layer_type"] == "gru":
-                    self.buffer.hxs[:, t] = self.recurrent_cell.squeeze(0)
+                    self.buffer.hxs[t] = current_cell.squeeze(0).squeeze(0).detach().cpu()
                 elif self.recurrence["layer_type"] == "lstm":
-                    self.buffer.hxs[:, t] = self.recurrent_cell[0].squeeze(0)
-                    self.buffer.cxs[:, t] = self.recurrent_cell[1].squeeze(0)
+                    self.buffer.hxs[t] = current_cell[0].squeeze(0).squeeze(0).detach().cpu()
+                    self.buffer.cxs[t] = current_cell[1].squeeze(0).squeeze(0).detach().cpu()
 
                 # Forward the model to retrieve the policy, the states' value and the recurrent cell states
                 policy, value, self.recurrent_cell = self.model(
-                    torch.tensor(self.obs), self.recurrent_cell
+                    obs_tensor.unsqueeze(0).to(self.device), current_cell
                 )
-                self.buffer.values[:, t] = value
+                self.buffer.values[t] = value.squeeze(0).detach().cpu()
 
                 # Sample actions from each individual policy branch
                 actions = []
@@ -209,37 +200,36 @@ class PPOTrainer:
                     action = action_branch.sample()
                     actions.append(action)
                     log_probs.append(action_branch.log_prob(action))
-                # Write actions, log_probs and values to buffer
-                self.buffer.actions[:, t] = torch.stack(actions, dim=1)
-                self.buffer.log_probs[:, t] = torch.stack(log_probs, dim=1)
+                action_tensor = torch.stack(actions, dim=1).detach()
+                log_prob_tensor = torch.stack(log_probs, dim=1).detach()
+                self.buffer.actions[t] = action_tensor.squeeze(0).cpu().long()
+                self.buffer.log_probs[t] = log_prob_tensor.squeeze(0).cpu()
 
-            # Send actions to the environments
-            for w, worker in enumerate(self.workers):
-                worker.child.send(("step", self.buffer.actions[w, t].cpu().numpy()))
+            # Interact with the environment
+            env_action = self.buffer.actions[t].cpu().numpy()
+            obs, reward, done, info = self.env.step(env_action)
+            self.buffer.rewards[t] = reward
+            self.buffer.dones[t] = done
 
-            # Retrieve step results from the environments
-            for w, worker in enumerate(self.workers):
-                obs, self.buffer.rewards[w, t], self.buffer.dones[w, t], info = worker.child.recv()
-                if info:
-                    # Store the information of the completed episode (e.g. total reward, episode length)
-                    episode_infos.append(info)
-                    # Reset agent (potential interface for providing reset parameters)
-                    worker.child.send(("reset", None))
-                    # Get data from reset
-                    obs = worker.child.recv()
-                    # Reset recurrent cell states
-                    if self.recurrence["reset_hidden_state"]:
-                        hxs, cxs = self.model.init_recurrent_cell_states(1, self.device)
-                        if self.recurrence["layer_type"] == "gru":
-                            self.recurrent_cell[:, w] = hxs
-                        elif self.recurrence["layer_type"] == "lstm":
-                            self.recurrent_cell[0][:, w] = hxs
-                            self.recurrent_cell[1][:, w] = cxs
-                # Store latest observations
-                self.obs[w] = obs
+            if info:
+                episode_infos.append(info)
+                obs = self.env.reset()
+                if self.recurrence["reset_hidden_state"]:
+                    hxs, cxs = self.model.init_recurrent_cell_states(1, self.device)
+                    if self.recurrence["layer_type"] == "transformer":
+                        self.recurrent_cell = torch.zeros_like(self.recurrent_cell)
+                    elif self.recurrence["layer_type"] == "gru":
+                        self.recurrent_cell = hxs
+                    elif self.recurrence["layer_type"] == "lstm":
+                        self.recurrent_cell = (hxs, cxs)
+
+            self.obs = np.asarray(obs, dtype=np.float32)
 
         # Calculate advantages
-        _, last_value, _ = self.model(torch.tensor(self.obs), self.recurrent_cell)
+        last_obs_tensor = (
+            torch.tensor(self.obs, dtype=torch.float32).unsqueeze(0).to(self.device)
+        )
+        _, last_value, _ = self.model(last_obs_tensor, self.recurrent_cell)
         self.buffer.calc_advantages(last_value, self.config["gamma"], self.config["td_lambda"])
 
         return episode_infos
@@ -397,18 +387,12 @@ class PPOTrainer:
     def close(self) -> None:
         """Terminates the trainer and all related processes."""
         try:
-            self.dummy_env.close()
+            self.env.close()
         except:
             pass
 
         try:
             self.writer.close()
-        except:
-            pass
-
-        try:
-            for worker in self.workers:
-                worker.child.send(("close", None))
         except:
             pass
 
