@@ -4,8 +4,6 @@ from torch import nn
 from torch.distributions import Categorical
 from torch.nn import functional as F
 
-from transformer import Transformer
-
 
 class ActorCriticModel(nn.Module):
     def __init__(self, config, observation_space, action_space_shape):
@@ -38,38 +36,17 @@ class ActorCriticModel(nn.Module):
         self.lin_hidden_in = nn.Linear(in_features_next_layer, self.hidden_size)
         nn.init.orthogonal_(self.lin_hidden_in.weight, np.sqrt(2))
 
-        # Memory layer (GRU, LSTM, or Transformer)
-        if self.layer_type == "transformer":
-            # Transformer setup with default settings
-
-            # Create transformer config using existing recurrence settings
-            transformer_config = {
-                "num_blocks": 3,
-                "embed_dim": self.hidden_size,
-                "num_heads": 8,
-                "memory_length": self.sequence_length,
-                "positional_encoding": "learned",
-                "layer_norm": "pre",
-                "gtrxl": False,
-                "gtrxl_bias": 2.0,
-            }
-
-            # Transformer blocks
-            self.transformer = Transformer(
-                transformer_config, self.hidden_size, 1000
-            )  # max_episode_length
-        else:
-            # Recurrent layer (GRU or LSTM)
-            if self.layer_type == "gru":
-                self.recurrent_layer = nn.GRU(self.hidden_size, self.hidden_size, batch_first=True)
-            elif self.layer_type == "lstm":
-                self.recurrent_layer = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=True)
-            # Init recurrent layer
-            for name, param in self.recurrent_layer.named_parameters():
-                if "bias" in name:
-                    nn.init.constant_(param, 0)
-                elif "weight" in name:
-                    nn.init.orthogonal_(param, np.sqrt(2))
+        # Recurrent layer (GRU or LSTM)
+        if self.layer_type == "gru":
+            self.recurrent_layer = nn.GRU(self.hidden_size, self.hidden_size, batch_first=True)
+        elif self.layer_type == "lstm":
+            self.recurrent_layer = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=True)
+        # Init recurrent layer
+        for name, param in self.recurrent_layer.named_parameters():
+            if "bias" in name:
+                nn.init.constant_(param, 0)
+            elif "weight" in name:
+                nn.init.orthogonal_(param, np.sqrt(2))
 
         # Hidden layer
         self.lin_hidden_out = nn.Linear(self.hidden_size, self.hidden_size)
@@ -127,55 +104,27 @@ class ActorCriticModel(nn.Module):
 
         h = F.relu(self.lin_hidden_in(h))
 
-        if self.layer_type == "transformer":
-            # Feed hidden layer for transformer
-            # Forward transformer blocks
-            # For simplicity, use dummy parameters for transformer forward
-            batch_size = h.size(0)
-            device = h.device
-            hidden_size = self.hidden_size
-            num_blocks = getattr(self, "transformer_num_blocks", self.transformer.num_blocks)
-
-            dummy_memories = torch.zeros(
-                batch_size,
-                self.sequence_length,
-                num_blocks,
-                hidden_size,
-                device=device,
-            )
-            dummy_mask = torch.ones(
-                batch_size, self.sequence_length, dtype=torch.bool, device=device
-            )
-            dummy_memory_indices = torch.zeros(
-                batch_size, self.sequence_length, dtype=torch.long, device=device
-            )
-
-            h, updated_memories = self.transformer(
-                h, dummy_memories, dummy_mask, dummy_memory_indices
-            )
-            memory_out = recurrent_cell  # Keep dummy recurrent_cell for compatibility
+        # Forward recurrent layer (GRU or LSTM) first, then hidden layer
+        if sequence_length == 1:
+            # Case: sampling training data or model optimization using sequence length == 1
+            h, recurrent_cell = self.recurrent_layer(h.unsqueeze(1), recurrent_cell)
+            h = h.squeeze(1)  # Remove sequence length dimension
         else:
-            # Forward recurrent layer (GRU or LSTM) first, then hidden layer
-            if sequence_length == 1:
-                # Case: sampling training data or model optimization using sequence length == 1
-                h, recurrent_cell = self.recurrent_layer(h.unsqueeze(1), recurrent_cell)
-                h = h.squeeze(1)  # Remove sequence length dimension
-            else:
-                # Case: Model optimization given a sequence length > 1
-                # Reshape the to be fed data to batch_size, sequence_length, data
-                h_shape = tuple(h.size())
-                h = h.reshape((h_shape[0] // sequence_length), sequence_length, h_shape[1])
+            # Case: Model optimization given a sequence length > 1
+            # Reshape the to be fed data to batch_size, sequence_length, data
+            h_shape = tuple(h.size())
+            h = h.reshape((h_shape[0] // sequence_length), sequence_length, h_shape[1])
 
-                # Forward recurrent layer
-                h, recurrent_cell = self.recurrent_layer(h, recurrent_cell)
+            # Forward recurrent layer
+            h, recurrent_cell = self.recurrent_layer(h, recurrent_cell)
 
-                # Reshape to the original tensor size
-                h_shape = tuple(h.size())
-                h = h.reshape(h_shape[0] * h_shape[1], h_shape[2])
+            # Reshape to the original tensor size
+            h_shape = tuple(h.size())
+            h = h.reshape(h_shape[0] * h_shape[1], h_shape[2])
 
-            # Feed hidden layer after recurrent layer
-            h = F.relu(self.lin_hidden_out(h))
-            memory_out = recurrent_cell
+        # Feed hidden layer after recurrent layer
+        h = F.relu(self.lin_hidden_out(h))
+        memory_out = recurrent_cell
 
         # Decouple policy from value
         # Feed hidden layer (policy)
@@ -214,9 +163,6 @@ class ActorCriticModel(nn.Module):
             {tuple} -- Depending on the used recurrent layer type, just hidden states (gru) or both hidden states and
                      cell states are returned using initial values.
         """
-        if self.layer_type == "transformer":
-            # For transformer, return None as memory is handled differently
-            return None, None
 
         hxs = torch.zeros(
             (num_sequences),
