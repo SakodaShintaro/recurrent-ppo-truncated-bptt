@@ -13,3 +13,4 @@ torchvision
 torchaudio
 numpy<2.0
 tensorboard>=2.16.0
+pandas

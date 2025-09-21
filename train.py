@@ -1,8 +1,10 @@
 import os
 import time
 from collections import deque
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 from ruamel.yaml import YAML
 from torch import optim
@@ -93,11 +95,21 @@ class PPOTrainer:
         initial_obs = self.env.reset()
         self.obs = np.asarray(initial_obs, dtype=np.float32)
 
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        print(timestamp)
+        self.save_dir = Path("results") / timestamp
+        print(self.save_dir)
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+
     def run_training(self) -> None:
         """Runs the entire training logic from sampling data to optimizing the model."""
         print("Step 6: Starting training")
         # Store episode results for monitoring statistics
         episode_infos = deque(maxlen=100)
+
+        result_dict_list = []
+
+        start = time.time()
 
         for update in range(2000):
             # Decay hyperparameters
@@ -119,37 +131,41 @@ class PPOTrainer:
             episode_infos.extend(sampled_episode_info)
             episode_result = self._process_episode_info(episode_infos)
 
+            elapsed_sec = time.time() - start
+            elapsed_min = elapsed_sec / 60
+
             # Print training statistics
-            if "success_percent" in episode_result:
-                result = "{:4} reward={:.2f} std={:.2f} length={:.1f} std={:.2f} success = {:.2f} pi_loss={:3f} v_loss={:3f} entropy={:.3f} loss={:3f} value={:.3f} advantage={:.3f}".format(
-                    update,
-                    episode_result["reward_mean"],
-                    episode_result["reward_std"],
-                    episode_result["length_mean"],
-                    episode_result["length_std"],
-                    episode_result["success_percent"],
-                    training_stats[0],
-                    training_stats[1],
-                    training_stats[3],
-                    training_stats[2],
-                    torch.mean(self.buffer.values),
-                    torch.mean(self.buffer.advantages),
-                )
-            else:
-                result = "{:4} reward={:.2f} std={:.2f} length={:.1f} std={:.2f} pi_loss={:3f} v_loss={:3f} entropy={:.3f} loss={:3f} value={:.3f} advantage={:.3f}".format(
-                    update,
-                    episode_result["reward_mean"],
-                    episode_result["reward_std"],
-                    episode_result["length_mean"],
-                    episode_result["length_std"],
-                    training_stats[0],
-                    training_stats[1],
-                    training_stats[3],
-                    training_stats[2],
-                    torch.mean(self.buffer.values),
-                    torch.mean(self.buffer.advantages),
-                )
+            result = "{:4} reward={:.2f} std={:.2f} length={:.1f} std={:.2f} pi_loss={:3f} v_loss={:3f} entropy={:.3f} loss={:3f} value={:.3f} advantage={:.3f}".format(
+                update,
+                episode_result["reward_mean"],
+                episode_result["reward_std"],
+                episode_result["length_mean"],
+                episode_result["length_std"],
+                training_stats[0],
+                training_stats[1],
+                training_stats[3],
+                training_stats[2],
+                torch.mean(self.buffer.values),
+                torch.mean(self.buffer.advantages),
+            )
             print(result)
+            result_dict = {
+                "elapsed_min": elapsed_min,
+                "update": update,
+                "reward_mean": episode_result["reward_mean"],
+                "reward_std": episode_result["reward_std"],
+                "length_mean": episode_result["length_mean"],
+                "length_std": episode_result["length_std"],
+                "policy_loss": training_stats[0],
+                "value_loss": training_stats[1],
+                "entropy": training_stats[3],
+                "loss": training_stats[2],
+                "value_mean": torch.mean(self.buffer.values).item(),
+                "advantage_mean": torch.mean(self.buffer.advantages).item(),
+            }
+            result_dict_list.append(result_dict)
+            df = pd.DataFrame(result_dict_list)
+            df.to_csv(self.save_dir / "result.csv", index=False)
 
             # Write training statistics to tensorboard
             self._write_training_summary(update, training_stats, episode_result)
