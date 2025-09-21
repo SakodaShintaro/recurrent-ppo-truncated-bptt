@@ -65,9 +65,7 @@ class PPOTrainer:
         self.obs = np.asarray(initial_obs, dtype=np.float32)
 
         timestamp = time.strftime("%Y%m%d-%H%M%S")
-        print(timestamp)
         self.save_dir = Path("results") / timestamp
-        print(self.save_dir)
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
     def run_training(self) -> None:
@@ -81,11 +79,6 @@ class PPOTrainer:
         start = time.time()
 
         for update in range(2000):
-            # Decay hyperparameters
-            learning_rate = 2.0e-4
-            beta = 0.001
-            clip_range = 0.2
-
             # Sample training data
             sampled_episode_info = self._sample_training_data()
 
@@ -93,7 +86,7 @@ class PPOTrainer:
             self.buffer.prepare_batch_dict()
 
             # Train epochs
-            training_stats = self._train_epochs(learning_rate, clip_range, beta)
+            training_stats = self._train_epochs()
             training_stats = np.mean(training_stats, axis=0)
 
             # Store recent episode infos
@@ -197,7 +190,7 @@ class PPOTrainer:
 
         return episode_infos
 
-    def _train_epochs(self, learning_rate: float, clip_range: float, beta: float) -> list:
+    def _train_epochs(self) -> list:
         """Trains several PPO epochs over one batch of data while dividing the batch into mini batches.
 
         Arguments:
@@ -213,13 +206,11 @@ class PPOTrainer:
             mini_batch_generator = self.buffer.recurrent_mini_batch_generator()
             for mini_batch in mini_batch_generator:
                 train_info.append(
-                    self._train_mini_batch(mini_batch, learning_rate, clip_range, beta)
+                    self._train_mini_batch(mini_batch)
                 )
         return train_info
 
-    def _train_mini_batch(
-        self, samples: dict, learning_rate: float, clip_range: float, beta: float
-    ) -> list:
+    def _train_mini_batch(self, samples: dict) -> list:
         """Uses one mini batch to optimize the model.
 
         Arguments:
@@ -231,6 +222,10 @@ class PPOTrainer:
         Returns:
             {list} -- list of training statistics (e.g. loss)
         """
+        learning_rate = 2.0e-4
+        beta = 0.001
+        clip_range = 0.2
+
         # Retrieve sampled recurrent cell states to feed the model
         if self.recurrence["layer_type"] == "gru":
             recurrent_cell = samples["hxs"].unsqueeze(0)
@@ -319,8 +314,10 @@ class PPOTrainer:
         return result
 
 
-def _load_config(path: str) -> dict:
-    """Load the YAML config file and return its contents as a dict."""
+if __name__ == "__main__":
+    run_id = "run"
+    # Parse the yaml config file. The result is a dictionary, which is passed to the trainer.
+    path = "./minigrid.yaml"
     yaml = YAML()
     with open(path, "r", encoding="utf-8") as stream:
         config = {}
@@ -329,13 +326,6 @@ def _load_config(path: str) -> dict:
                 config = dict(data)
     if not config:
         raise ValueError(f"Config file '{path}' did not contain any data.")
-    return config
-
-
-if __name__ == "__main__":
-    run_id = "run"
-    # Parse the yaml config file. The result is a dictionary, which is passed to the trainer.
-    config = _load_config("./minigrid.yaml")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.set_default_dtype(torch.float32)
