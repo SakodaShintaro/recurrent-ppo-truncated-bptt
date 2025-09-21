@@ -9,8 +9,31 @@ from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 
 from buffer import Buffer
+from minigrid_env import Minigrid
 from model import ActorCriticModel
-from utils import create_env, polynomial_decay
+
+
+def polynomial_decay(
+    initial: float, final: float, max_decay_steps: int, power: float, current_step: int
+) -> float:
+    """Decays hyperparameters polynomially. If power is set to 1.0, the decay behaves linearly.
+
+    Arguments:
+        initial {float} -- Initial hyperparameter such as the learning rate
+        final {float} -- Final hyperparameter such as the learning rate
+        max_decay_steps {int} -- The maximum numbers of steps to decay the hyperparameter
+        power {float} -- The strength of the polynomial decay
+        current_step {int} -- The current step of the training
+
+    Returns:
+        {float} -- Decayed hyperparameter
+    """
+    # Return the final value if max_decay_steps is reached or the initial and the final value are equal
+    if current_step > max_decay_steps or initial == final:
+        return final
+    # Return the polynomially decayed value given the current step
+    else:
+        return (initial - final) * ((1 - current_step / max_decay_steps) ** power) + final
 
 
 class PPOTrainer:
@@ -41,10 +64,9 @@ class PPOTrainer:
 
         # Init dummy environment and retrieve action and observation spaces
         print("Step 1: Init dummy environment")
-        dummy_env = create_env(self.config["environment"])
-        self.observation_space = dummy_env.observation_space
-        self.action_space_shape = (dummy_env.action_space.n,)
-        dummy_env.close()
+        self.env = Minigrid(env_name="MiniGrid-MemoryS9-v0", realtime_mode=False)
+        self.observation_space = self.env.observation_space
+        self.action_space_shape = (self.env.action_space.n,)
 
         # Init buffer
         print("Step 2: Init buffer")
@@ -62,15 +84,11 @@ class PPOTrainer:
 
         # Init environment
         print("Step 4: Init environment")
-        self.env = create_env(self.config["environment"])
-
         # Setup initial recurrent cell states (LSTM: tuple(tensor, tensor) or GRU: tensor)
         hxs, cxs = self.model.init_recurrent_cell_states(1, self.device)
         if self.recurrence["layer_type"] == "transformer":
             # Create dummy recurrent cell for transformer (keeps existing code working)
-            self.recurrent_cell = torch.zeros(
-                1, 1, self.config["hidden_size"], device=self.device
-            )
+            self.recurrent_cell = torch.zeros(1, 1, self.config["hidden_size"], device=self.device)
         elif self.recurrence["layer_type"] == "gru":
             self.recurrent_cell = hxs
         elif self.recurrence["layer_type"] == "lstm":
@@ -227,9 +245,7 @@ class PPOTrainer:
             self.obs = np.asarray(obs, dtype=np.float32)
 
         # Calculate advantages
-        last_obs_tensor = (
-            torch.tensor(self.obs, dtype=torch.float32).unsqueeze(0).to(self.device)
-        )
+        last_obs_tensor = torch.tensor(self.obs, dtype=torch.float32).unsqueeze(0).to(self.device)
         _, last_value, _ = self.model(last_obs_tensor, self.recurrent_cell)
         self.buffer.calc_advantages(last_value, self.config["gamma"], self.config["td_lambda"])
 
