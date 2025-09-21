@@ -247,7 +247,7 @@ class PPOTrainer:
         # Calculate advantages
         last_obs_tensor = torch.tensor(self.obs, dtype=torch.float32).unsqueeze(0).to(self.device)
         _, last_value, _ = self.model(last_obs_tensor, self.recurrent_cell)
-        self.buffer.calc_advantages(last_value, self.config["gamma"], self.config["td_lambda"])
+        self.buffer.calc_advantages(last_value, gamma=0.99, td_lambda=0.95)
 
         return episode_infos
 
@@ -337,18 +337,14 @@ class PPOTrainer:
         entropy_bonus = entropies.mean()
 
         # Complete loss
-        loss = -(
-            policy_loss - self.config["value_loss_coefficient"] * vf_loss + beta * entropy_bonus
-        )
+        loss = -(policy_loss - 0.25 * vf_loss + beta * entropy_bonus)
 
         # Compute gradients
         for pg in self.optimizer.param_groups:
             pg["lr"] = learning_rate
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(
-            self.model.parameters(), max_norm=self.config["max_grad_norm"]
-        )
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.5)
         self.optimizer.step()
 
         return [
