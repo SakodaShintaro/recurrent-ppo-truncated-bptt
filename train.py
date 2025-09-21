@@ -189,10 +189,9 @@ class PPOTrainer:
                 # Sample actions from each individual policy branch
                 actions = []
                 log_probs = []
-                for action_branch in policy:
-                    action = action_branch.sample()
-                    actions.append(action)
-                    log_probs.append(action_branch.log_prob(action))
+                action = policy.sample()
+                actions.append(action)
+                log_probs.append(policy.log_prob(action))
                 action_tensor = torch.stack(actions, dim=1).detach()
                 log_prob_tensor = torch.stack(log_probs, dim=1).detach()
                 self.buffer.actions[t] = action_tensor.squeeze(0).cpu().long()
@@ -265,9 +264,8 @@ class PPOTrainer:
         # Policy Loss
         # Retrieve and process log_probs from each policy branch
         log_probs, entropies = [], []
-        for i, policy_branch in enumerate(policy):
-            log_probs.append(policy_branch.log_prob(samples["actions"][:, i]))
-            entropies.append(policy_branch.entropy())
+        log_probs.append(policy.log_prob(samples["actions"][:, 0]))
+        entropies.append(policy.entropy())
         log_probs = torch.stack(log_probs, dim=1)
         entropies = torch.stack(entropies, dim=1).sum(1).reshape(-1)
 
