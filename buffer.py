@@ -23,7 +23,7 @@ class Buffer:
         # Setup members
         self.device = device
         self.worker_steps = config["worker_steps"]
-        self.n_mini_batches = config["n_mini_batch"]
+        self.n_mini_batches = 4
         self.batch_size = self.worker_steps
         self.mini_batch_size = self.batch_size // self.n_mini_batches
         hidden_size = config["hidden_size"]

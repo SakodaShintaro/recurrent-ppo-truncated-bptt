@@ -52,9 +52,6 @@ class PPOTrainer:
         self.recurrence = config["recurrence"]
         self.device = device
         self.run_id = run_id
-        self.lr_schedule = config["learning_rate_schedule"]
-        self.beta_schedule = config["beta_schedule"]
-        self.cr_schedule = config["clip_range_schedule"]
 
         # Setup Tensorboard Summary Writer
         if not os.path.exists("./summaries"):
@@ -80,16 +77,13 @@ class PPOTrainer:
             self.config, self.observation_space, self.action_space_shape
         ).to(self.device)
         self.model.train()
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr_schedule["initial"])
+        self.optimizer = optim.AdamW(self.model.parameters(), lr=2.0e-4)
 
         # Init environment
         print("Step 4: Init environment")
         # Setup initial recurrent cell states (LSTM: tuple(tensor, tensor) or GRU: tensor)
         hxs, cxs = self.model.init_recurrent_cell_states(1, self.device)
-        if self.recurrence["layer_type"] == "transformer":
-            # Create dummy recurrent cell for transformer (keeps existing code working)
-            self.recurrent_cell = torch.zeros(1, 1, self.config["hidden_size"], device=self.device)
-        elif self.recurrence["layer_type"] == "gru":
+        if self.recurrence["layer_type"] == "gru":
             self.recurrent_cell = hxs
         elif self.recurrence["layer_type"] == "lstm":
             self.recurrent_cell = (hxs, cxs)
@@ -105,29 +99,11 @@ class PPOTrainer:
         # Store episode results for monitoring statistics
         episode_infos = deque(maxlen=100)
 
-        for update in range(self.config["updates"]):
+        for update in range(2000):
             # Decay hyperparameters
-            learning_rate = polynomial_decay(
-                self.lr_schedule["initial"],
-                self.lr_schedule["final"],
-                self.lr_schedule["max_decay_steps"],
-                self.lr_schedule["power"],
-                update,
-            )
-            beta = polynomial_decay(
-                self.beta_schedule["initial"],
-                self.beta_schedule["final"],
-                self.beta_schedule["max_decay_steps"],
-                self.beta_schedule["power"],
-                update,
-            )
-            clip_range = polynomial_decay(
-                self.cr_schedule["initial"],
-                self.cr_schedule["final"],
-                self.cr_schedule["max_decay_steps"],
-                self.cr_schedule["power"],
-                update,
-            )
+            learning_rate = polynomial_decay(2.0e-4, 2.0e-4, 300, 1.0, update)
+            beta = polynomial_decay(0.001, 0.001, 300, 1.0, update)
+            clip_range = polynomial_decay(0.2, 0.2, 300, 1.0, update)
 
             # Sample training data
             sampled_episode_info = self._sample_training_data()
@@ -198,9 +174,7 @@ class PPOTrainer:
                 self.buffer.obs[t] = obs_tensor.cpu()
 
                 current_cell = self.recurrent_cell
-                if self.recurrence["layer_type"] == "transformer":
-                    self.buffer.hxs[t] = current_cell.squeeze(0).squeeze(0).detach().cpu()
-                elif self.recurrence["layer_type"] == "gru":
+                if self.recurrence["layer_type"] == "gru":
                     self.buffer.hxs[t] = current_cell.squeeze(0).squeeze(0).detach().cpu()
                 elif self.recurrence["layer_type"] == "lstm":
                     self.buffer.hxs[t] = current_cell[0].squeeze(0).squeeze(0).detach().cpu()
@@ -233,14 +207,6 @@ class PPOTrainer:
             if info:
                 episode_infos.append(info)
                 obs = self.env.reset()
-                if self.recurrence["reset_hidden_state"]:
-                    hxs, cxs = self.model.init_recurrent_cell_states(1, self.device)
-                    if self.recurrence["layer_type"] == "transformer":
-                        self.recurrent_cell = torch.zeros_like(self.recurrent_cell)
-                    elif self.recurrence["layer_type"] == "gru":
-                        self.recurrent_cell = hxs
-                    elif self.recurrence["layer_type"] == "lstm":
-                        self.recurrent_cell = (hxs, cxs)
 
             self.obs = np.asarray(obs, dtype=np.float32)
 
@@ -262,7 +228,7 @@ class PPOTrainer:
         Returns:
             {list} -- Training statistics of one training epoch"""
         train_info = []
-        for _ in range(self.config["epochs"]):
+        for _ in range(4):
             # Retrieve the to be trained mini batches via a generator
             mini_batch_generator = self.buffer.recurrent_mini_batch_generator()
             for mini_batch in mini_batch_generator:
@@ -286,9 +252,7 @@ class PPOTrainer:
             {list} -- list of training statistics (e.g. loss)
         """
         # Retrieve sampled recurrent cell states to feed the model
-        if self.recurrence["layer_type"] == "transformer":
-            recurrent_cell = samples["hxs"].unsqueeze(0)  # Use dummy cell for compatibility
-        elif self.recurrence["layer_type"] == "gru":
+        if self.recurrence["layer_type"] == "gru":
             recurrent_cell = samples["hxs"].unsqueeze(0)
         elif self.recurrence["layer_type"] == "lstm":
             recurrent_cell = (samples["hxs"].unsqueeze(0), samples["cxs"].unsqueeze(0))

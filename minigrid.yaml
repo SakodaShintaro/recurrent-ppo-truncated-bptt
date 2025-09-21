@@ -1,24 +1,5 @@
-updates: 2000
-epochs: 4
 worker_steps: 1024
-n_mini_batch: 4
 hidden_size: 256
 recurrence:
     sequence_length: 8
     layer_type: lstm
-    reset_hidden_state: False
-learning_rate_schedule:
-    initial: 2.0e-4
-    final: 2.0e-4
-    power: 1.0
-    max_decay_steps: 300
-beta_schedule:
-    initial: 0.001
-    final: 0.001
-    power: 1.0
-    max_decay_steps: 300
-clip_range_schedule:
-    initial: 0.2
-    final: 0.2
-    power: 1.0
-    max_decay_steps: 300
