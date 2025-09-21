@@ -74,13 +74,13 @@ class ActorCriticModel(nn.Module):
     def forward(
         self,
         obs: torch.tensor,
-        recurrent_cell: torch.tensor = None,
+        recurrent_cell: torch.tensor,
         sequence_length: int = 1,
     ):
         """Forward pass of the model
 
         Arguments:
-            obs {torch.tensor} -- Batch of observations
+            obs {torch.tensor} -- Batch of observations  (B, 3, H, W)
             recurrent_cell {torch.tensor} -- Memory cell of the recurrent layer
             sequence_length {int} -- Length of the fed sequences. Defaults to 1.
 
@@ -92,33 +92,27 @@ class ActorCriticModel(nn.Module):
         # Set observation as input to the model
         h = obs
         # Forward observation encoder
-        batch_size = h.size()[0]
+        B = h.shape[0]
         # Propagate input through the visual encoder
         h = F.relu(self.conv1(h))
         h = F.relu(self.conv2(h))
         h = F.relu(self.conv3(h))
         # Flatten the output of the convolutional layers
-        h = h.reshape((batch_size, -1))
+        h = h.reshape((B, -1))
 
         h = F.relu(self.lin_hidden_in(h))
 
         # Forward recurrent layer (GRU or LSTM) first, then hidden layer
-        if sequence_length == 1:
-            # Case: sampling training data or model optimization using sequence length == 1
-            h, recurrent_cell = self.recurrent_layer(h.unsqueeze(1), recurrent_cell)
-            h = h.squeeze(1)  # Remove sequence length dimension
-        else:
-            # Case: Model optimization given a sequence length > 1
-            # Reshape the to be fed data to batch_size, sequence_length, data
-            h_shape = tuple(h.size())
-            h = h.reshape((h_shape[0] // sequence_length), sequence_length, h_shape[1])
+        # Reshape the to be fed data to batch_size, sequence_length, data
+        B, D = h.shape
+        h = h.reshape((B // sequence_length, sequence_length, D))
 
-            # Forward recurrent layer
-            h, recurrent_cell = self.recurrent_layer(h, recurrent_cell)
+        # Forward recurrent layer
+        h, recurrent_cell = self.recurrent_layer(h, recurrent_cell)
 
-            # Reshape to the original tensor size
-            h_shape = tuple(h.size())
-            h = h.reshape(h_shape[0] * h_shape[1], h_shape[2])
+        # Reshape to the original tensor size
+        B, T, D = h.shape
+        h = h.reshape(B * T, D)
 
         # Feed hidden layer after recurrent layer
         h = F.relu(self.lin_hidden_out(h))
