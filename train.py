@@ -8,7 +8,6 @@ import pandas as pd
 import torch
 from ruamel.yaml import YAML
 from torch import optim
-from torch.utils.tensorboard import SummaryWriter
 
 from buffer import Buffer
 from minigrid_env import Minigrid
@@ -54,12 +53,6 @@ class PPOTrainer:
         self.recurrence = config["recurrence"]
         self.device = device
         self.run_id = run_id
-
-        # Setup Tensorboard Summary Writer
-        if not os.path.exists("./summaries"):
-            os.makedirs("./summaries")
-        timestamp = time.strftime("/%Y%m%d-%H%M%S" + "/")
-        self.writer = SummaryWriter("./summaries/" + run_id + timestamp)
 
         # Init dummy environment and retrieve action and observation spaces
         print("Step 1: Init dummy environment")
@@ -166,9 +159,6 @@ class PPOTrainer:
             result_dict_list.append(result_dict)
             df = pd.DataFrame(result_dict_list)
             df.to_csv(self.save_dir / "result.csv", index=False)
-
-            # Write training statistics to tensorboard
-            self._write_training_summary(update, training_stats, episode_result)
 
             # Free memory
             del self.buffer.samples_flat
@@ -331,28 +321,6 @@ class PPOTrainer:
             loss.cpu().data.numpy(),
             entropy_bonus.cpu().data.numpy(),
         ]
-
-    def _write_training_summary(self, update, training_stats, episode_result) -> None:
-        """Writes to an event file based on the run-id argument.
-
-        Arguments:
-            update {int} -- Current PPO Update
-            training_stats {list} -- Statistics of the training algorithm
-            episode_result {dict} -- Statistics of completed episodes
-        """
-        if episode_result:
-            for key in episode_result:
-                if "std" not in key:
-                    self.writer.add_scalar("episode/" + key, episode_result[key], update)
-        self.writer.add_scalar("losses/loss", training_stats[2], update)
-        self.writer.add_scalar("losses/policy_loss", training_stats[0], update)
-        self.writer.add_scalar("losses/value_loss", training_stats[1], update)
-        self.writer.add_scalar("losses/entropy", training_stats[3], update)
-        self.writer.add_scalar("training/sequence_length", self.buffer.true_sequence_length, update)
-        self.writer.add_scalar("training/value_mean", torch.mean(self.buffer.values), update)
-        self.writer.add_scalar(
-            "training/advantage_mean", torch.mean(self.buffer.advantages), update
-        )
 
     @staticmethod
     def _process_episode_info(episode_info: list) -> dict:
