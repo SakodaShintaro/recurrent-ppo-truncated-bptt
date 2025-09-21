@@ -396,7 +396,8 @@ def main():
     config = _load_config("./minigrid.yaml")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    torch.set_default_tensor_type("torch.cuda.FloatTensor")
+    torch.set_default_dtype(torch.float32)
+    torch.set_default_device(device)
 
     # Initialize the PPO trainer and commence training
     trainer = PPOTrainer(config, run_id=run_id, device=device)
