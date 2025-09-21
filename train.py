@@ -13,29 +13,6 @@ from minigrid_env import Minigrid
 from model import ActorCriticModel
 
 
-def polynomial_decay(
-    initial: float, final: float, max_decay_steps: int, power: float, current_step: int
-) -> float:
-    """Decays hyperparameters polynomially. If power is set to 1.0, the decay behaves linearly.
-
-    Arguments:
-        initial {float} -- Initial hyperparameter such as the learning rate
-        final {float} -- Final hyperparameter such as the learning rate
-        max_decay_steps {int} -- The maximum numbers of steps to decay the hyperparameter
-        power {float} -- The strength of the polynomial decay
-        current_step {int} -- The current step of the training
-
-    Returns:
-        {float} -- Decayed hyperparameter
-    """
-    # Return the final value if max_decay_steps is reached or the initial and the final value are equal
-    if current_step > max_decay_steps or initial == final:
-        return final
-    # Return the polynomially decayed value given the current step
-    else:
-        return (initial - final) * ((1 - current_step / max_decay_steps) ** power) + final
-
-
 class PPOTrainer:
     def __init__(
         self, config: dict, run_id: str = "run", device: torch.device = torch.device("cpu")
@@ -105,9 +82,9 @@ class PPOTrainer:
 
         for update in range(2000):
             # Decay hyperparameters
-            learning_rate = polynomial_decay(2.0e-4, 2.0e-4, 300, 1.0, update)
-            beta = polynomial_decay(0.001, 0.001, 300, 1.0, update)
-            clip_range = polynomial_decay(0.2, 0.2, 300, 1.0, update)
+            learning_rate = 2.0e-4
+            beta = 0.001
+            clip_range = 0.2
 
             # Sample training data
             sampled_episode_info = self._sample_training_data()
@@ -164,6 +141,7 @@ class PPOTrainer:
             if self.device.type == "cuda":
                 torch.cuda.empty_cache()
 
+    @torch.no_grad()
     def _sample_training_data(self) -> list:
         """Runs the environment for the configured number of steps to sample training data.
 
@@ -173,34 +151,32 @@ class PPOTrainer:
         episode_infos = []
         # Sample actions from the model and collect experiences for training
         for t in range(self.config["worker_steps"]):
-            # Gradients can be omitted for sampling training data
-            with torch.no_grad():
-                obs_tensor = torch.tensor(self.obs, dtype=torch.float32)
-                self.buffer.obs[t] = obs_tensor.cpu()
+            obs_tensor = torch.tensor(self.obs, dtype=torch.float32)
+            self.buffer.obs[t] = obs_tensor.cpu()
 
-                current_cell = self.recurrent_cell
-                if self.recurrence["layer_type"] == "gru":
-                    self.buffer.hxs[t] = current_cell.squeeze(0).squeeze(0).detach().cpu()
-                elif self.recurrence["layer_type"] == "lstm":
-                    self.buffer.hxs[t] = current_cell[0].squeeze(0).squeeze(0).detach().cpu()
-                    self.buffer.cxs[t] = current_cell[1].squeeze(0).squeeze(0).detach().cpu()
+            current_cell = self.recurrent_cell
+            if self.recurrence["layer_type"] == "gru":
+                self.buffer.hxs[t] = current_cell.squeeze(0).squeeze(0).detach().cpu()
+            elif self.recurrence["layer_type"] == "lstm":
+                self.buffer.hxs[t] = current_cell[0].squeeze(0).squeeze(0).detach().cpu()
+                self.buffer.cxs[t] = current_cell[1].squeeze(0).squeeze(0).detach().cpu()
 
-                # Forward the model to retrieve the policy, the states' value and the recurrent cell states
-                policy, value, self.recurrent_cell = self.model(
-                    obs_tensor.unsqueeze(0).to(self.device), current_cell
-                )
-                self.buffer.values[t] = value.squeeze(0).detach().cpu()
+            # Forward the model to retrieve the policy, the states' value and the recurrent cell states
+            policy, value, self.recurrent_cell = self.model(
+                obs_tensor.unsqueeze(0).to(self.device), current_cell
+            )
+            self.buffer.values[t] = value.squeeze(0).detach().cpu()
 
-                # Sample actions from each individual policy branch
-                actions = []
-                log_probs = []
-                action = policy.sample()
-                actions.append(action)
-                log_probs.append(policy.log_prob(action))
-                action_tensor = torch.stack(actions, dim=1).detach()
-                log_prob_tensor = torch.stack(log_probs, dim=1).detach()
-                self.buffer.actions[t] = action_tensor.squeeze(0).cpu().long()
-                self.buffer.log_probs[t] = log_prob_tensor.squeeze(0).cpu()
+            # Sample actions from each individual policy branch
+            actions = []
+            log_probs = []
+            action = policy.sample()
+            actions.append(action)
+            log_probs.append(policy.log_prob(action))
+            action_tensor = torch.stack(actions, dim=1).detach()
+            log_prob_tensor = torch.stack(log_probs, dim=1).detach()
+            self.buffer.actions[t] = action_tensor.squeeze(0).cpu().long()
+            self.buffer.log_probs[t] = log_prob_tensor.squeeze(0).cpu()
 
             # Interact with the environment
             env_action = self.buffer.actions[t].cpu().numpy()
@@ -342,21 +318,6 @@ class PPOTrainer:
                 result[key + "_std"] = np.std([info[key] for info in episode_info])
         return result
 
-    def close(self) -> None:
-        """Terminates the trainer and all related processes."""
-        try:
-            self.env.close()
-        except:
-            pass
-
-        try:
-            self.writer.close()
-        except:
-            pass
-
-        time.sleep(1.0)
-        exit(0)
-
 
 def _load_config(path: str) -> dict:
     """Load the YAML config file and return its contents as a dict."""
@@ -371,7 +332,7 @@ def _load_config(path: str) -> dict:
     return config
 
 
-def main():
+if __name__ == "__main__":
     run_id = "run"
     # Parse the yaml config file. The result is a dictionary, which is passed to the trainer.
     config = _load_config("./minigrid.yaml")
@@ -383,8 +344,3 @@ def main():
     # Initialize the PPO trainer and commence training
     trainer = PPOTrainer(config, run_id=run_id, device=device)
     trainer.run_training()
-    trainer.close()
-
-
-if __name__ == "__main__":
-    main()
