@@ -27,14 +27,10 @@ class ActorCriticModel(nn.Module):
         self.conv1 = nn.Conv2d(observation_space.shape[0], 32, 8, 4)
         self.conv2 = nn.Conv2d(32, 64, 4, 2, 0)
         self.conv3 = nn.Conv2d(64, 64, 3, 1, 0)
-        nn.init.orthogonal_(self.conv1.weight, np.sqrt(2))
-        nn.init.orthogonal_(self.conv2.weight, np.sqrt(2))
-        nn.init.orthogonal_(self.conv3.weight, np.sqrt(2))
         # Compute output size of convolutional layers
         in_features_next_layer = self.get_conv_output(observation_space.shape)
 
         self.lin_hidden_in = nn.Linear(in_features_next_layer, self.hidden_size)
-        nn.init.orthogonal_(self.lin_hidden_in.weight, np.sqrt(2))
 
         # Recurrent layer (GRU or LSTM)
         if self.layer_type == "gru":
@@ -42,34 +38,27 @@ class ActorCriticModel(nn.Module):
         elif self.layer_type == "lstm":
             self.recurrent_layer = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=True)
         # Init recurrent layer
-        for name, param in self.recurrent_layer.named_parameters():
-            if "bias" in name:
-                nn.init.constant_(param, 0)
-            elif "weight" in name:
-                nn.init.orthogonal_(param, np.sqrt(2))
 
         # Hidden layer
         self.lin_hidden_out = nn.Linear(self.hidden_size, self.hidden_size)
-        nn.init.orthogonal_(self.lin_hidden_out.weight, np.sqrt(2))
 
         # Decouple policy from value
         # Hidden layer of the policy
         self.lin_policy = nn.Linear(self.hidden_size, self.hidden_size)
-        nn.init.orthogonal_(self.lin_policy.weight, np.sqrt(2))
 
         # Hidden layer of the value function
         self.lin_value = nn.Linear(self.hidden_size, self.hidden_size)
-        nn.init.orthogonal_(self.lin_value.weight, np.sqrt(2))
 
         # Outputs / Model heads
         # Policy (Multi-discrete categorical distribution)
         assert len(action_space_shape) == 1
         self.policy = nn.Linear(in_features=self.hidden_size, out_features=action_space_shape[0])
-        nn.init.orthogonal_(self.policy.weight, np.sqrt(0.01))
 
         # Value function
         self.value = nn.Linear(self.hidden_size, 1)
-        nn.init.orthogonal_(self.value.weight, 1)
+
+        # Apply weight initialization to all modules
+        self.apply(self._init_weights)
 
     def forward(
         self,
@@ -129,6 +118,18 @@ class ActorCriticModel(nn.Module):
         pi = Categorical(logits=self.policy(h_policy))
 
         return pi, value, memory_out
+
+    def _init_weights(self, module: nn.Module) -> None:
+        """Initialize weights with orthogonal initialization.
+
+        Arguments:
+            module {nn.Module} -- Module to initialize
+        """
+        for name, param in module.named_parameters():
+            if "bias" in name:
+                nn.init.constant_(param, 0)
+            elif "weight" in name:
+                nn.init.orthogonal_(param, np.sqrt(2))
 
     def get_conv_output(self, shape: tuple) -> int:
         """Computes the output size of the convolutional layers by feeding a dummy tensor.
