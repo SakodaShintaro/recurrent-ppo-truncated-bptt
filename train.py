@@ -5,7 +5,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-from ruamel.yaml import YAML
 from torch import optim
 
 from buffer import Buffer
@@ -14,9 +13,7 @@ from model import ActorCriticModel
 
 
 class PPOTrainer:
-    def __init__(
-        self, config: dict, run_id: str = "run", device: torch.device = torch.device("cpu")
-    ) -> None:
+    def __init__(self, run_id: str = "run", device: torch.device = torch.device("cpu")) -> None:
         """Initializes all needed training components.
 
         Arguments:
@@ -25,8 +22,6 @@ class PPOTrainer:
             device {torch.device, optional} -- Determines the training device. Defaults to cpu.
         """
         # Set variables
-        self.config = config
-        self.recurrence = config["recurrence"]
         self.device = device
         self.run_id = run_id
 
@@ -38,15 +33,25 @@ class PPOTrainer:
 
         # Init buffer
         print("Step 2: Init buffer")
+        self.worker_steps = 1024
+        hidden_size = 256
+        self.layer_type = "lstm"
+        sequence_length = 8
         self.buffer = Buffer(
-            self.config, self.observation_space, self.action_space_shape, self.device
+            self.worker_steps,
+            hidden_size,
+            self.layer_type,
+            sequence_length,
+            self.observation_space,
+            self.action_space_shape,
+            self.device,
         )
 
         # Init model
         print("Step 3: Init model and optimizer")
         self.model = ActorCriticModel(
-            self.config["hidden_size"],
-            self.config["recurrence"]["layer_type"],
+            hidden_size,
+            self.layer_type,
             self.observation_space,
             self.action_space_shape,
         ).to(self.device)
@@ -57,9 +62,9 @@ class PPOTrainer:
         print("Step 4: Init environment")
         # Setup initial recurrent cell states (LSTM: tuple(tensor, tensor) or GRU: tensor)
         hxs, cxs = self.model.init_recurrent_cell_states(1, self.device)
-        if self.recurrence["layer_type"] == "gru":
+        if self.layer_type == "gru":
             self.recurrent_cell = hxs
-        elif self.recurrence["layer_type"] == "lstm":
+        elif self.layer_type == "lstm":
             self.recurrent_cell = (hxs, cxs)
 
         # Reset environment
@@ -146,14 +151,14 @@ class PPOTrainer:
         """
         episode_infos = []
         # Sample actions from the model and collect experiences for training
-        for t in range(self.config["worker_steps"]):
+        for t in range(self.worker_steps):
             obs_tensor = torch.tensor(self.obs, dtype=torch.float32)
             self.buffer.obs[t] = obs_tensor.cpu()
 
             current_cell = self.recurrent_cell
-            if self.recurrence["layer_type"] == "gru":
+            if self.layer_type == "gru":
                 self.buffer.hxs[t] = current_cell.squeeze(0).squeeze(0).detach().cpu()
-            elif self.recurrence["layer_type"] == "lstm":
+            elif self.layer_type == "lstm":
                 self.buffer.hxs[t] = current_cell[0].squeeze(0).squeeze(0).detach().cpu()
                 self.buffer.cxs[t] = current_cell[1].squeeze(0).squeeze(0).detach().cpu()
 
@@ -228,9 +233,9 @@ class PPOTrainer:
         clip_range = 0.2
 
         # Retrieve sampled recurrent cell states to feed the model
-        if self.recurrence["layer_type"] == "gru":
+        if self.layer_type == "gru":
             recurrent_cell = samples["hxs"].unsqueeze(0)
-        elif self.recurrence["layer_type"] == "lstm":
+        elif self.layer_type == "lstm":
             recurrent_cell = (samples["hxs"].unsqueeze(0), samples["cxs"].unsqueeze(0))
 
         # Forward model
@@ -317,21 +322,11 @@ class PPOTrainer:
 
 if __name__ == "__main__":
     run_id = "run"
-    # Parse the yaml config file. The result is a dictionary, which is passed to the trainer.
-    path = "./minigrid.yaml"
-    yaml = YAML()
-    with open(path, "r", encoding="utf-8") as stream:
-        config = {}
-        for data in yaml.load_all(stream):
-            if data:
-                config = dict(data)
-    if not config:
-        raise ValueError(f"Config file '{path}' did not contain any data.")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.set_default_dtype(torch.float32)
     torch.set_default_device(device)
 
     # Initialize the PPO trainer and commence training
-    trainer = PPOTrainer(config, run_id=run_id, device=device)
+    trainer = PPOTrainer(run_id=run_id, device=device)
     trainer.run_training()

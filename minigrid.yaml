@@ -1,5 +1,0 @@
-worker_steps: 1024
-hidden_size: 256
-recurrence:
-    sequence_length: 8
-    layer_type: lstm

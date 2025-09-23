@@ -8,7 +8,10 @@ class Buffer:
 
     def __init__(
         self,
-        config: dict,
+        worker_steps: int,
+        hidden_size: int,
+        layer_type: str,
+        sequence_length: int,
         observation_space: spaces.Box,
         action_space_shape: tuple,
         device: torch.device,
@@ -22,13 +25,12 @@ class Buffer:
         """
         # Setup members
         self.device = device
-        self.worker_steps = config["worker_steps"]
+        self.worker_steps = worker_steps
         self.n_mini_batches = 4
         self.batch_size = self.worker_steps
         self.mini_batch_size = self.batch_size // self.n_mini_batches
-        hidden_size = config["hidden_size"]
-        self.layer_type = config["recurrence"]["layer_type"]
-        self.sequence_length = config["recurrence"]["sequence_length"]
+        self.layer_type = layer_type
+        self.sequence_length = sequence_length
         self.true_sequence_length = 0
 
         # Initialize the buffer's data storage for a single environment
