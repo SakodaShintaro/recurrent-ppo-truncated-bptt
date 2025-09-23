@@ -61,7 +61,7 @@ class PPOTrainer:
 
         # Reset environment
         print("Step 5: Reset environment")
-        initial_obs = self.env.reset()
+        initial_obs, _ = self.env.reset()
         self.obs = np.asarray(initial_obs, dtype=np.float32)
 
         timestamp = time.strftime("%Y%m%d-%H%M%S")
@@ -173,13 +173,14 @@ class PPOTrainer:
 
             # Interact with the environment
             env_action = self.buffer.actions[t].cpu().numpy()
-            obs, reward, done, info = self.env.step(env_action)
+            obs, reward, terminated, truncated, info = self.env.step(env_action)
+            done = terminated or truncated
             self.buffer.rewards[t] = reward
             self.buffer.dones[t] = done
 
-            if info:
+            if done:
                 episode_infos.append(info)
-                obs = self.env.reset()
+                obs, _ = self.env.reset()
 
             self.obs = np.asarray(obs, dtype=np.float32)
 
@@ -301,14 +302,11 @@ class PPOTrainer:
             {dict} -- Processed episode results (computes the mean and std for most available keys)
         """
         result = {}
-        if len(episode_info) > 0:
-            for key in episode_info[0].keys():
-                if key == "success":
-                    # This concerns the PocMemoryEnv only
-                    episode_result = [info[key] for info in episode_info]
-                    result[key + "_percent"] = np.sum(episode_result) / len(episode_result)
-                result[key + "_mean"] = np.mean([info[key] for info in episode_info])
-                result[key + "_std"] = np.std([info[key] for info in episode_info])
+        result["reward_mean"] = np.mean([info["episode"]["r"] for info in episode_info])
+        result["reward_std"] = np.std([info["episode"]["r"] for info in episode_info])
+        result["length_mean"] = np.mean([info["episode"]["l"] for info in episode_info])
+        result["length_std"] = np.std([info["episode"]["l"] for info in episode_info])
+        assert result["reward_mean"] > 0, "reward mean is not greater than 0"
         return result
 
 

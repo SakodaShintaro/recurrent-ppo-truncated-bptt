@@ -31,27 +31,27 @@ class Minigrid:
 
     def reset(self):
         self._rewards = []
-        obs, _ = self._env.reset(seed=np.random.randint(0, 99))
+        obs, info = self._env.reset(seed=np.random.randint(0, 99))
         obs = obs.astype(np.float32) / 255.0
         # To conform PyTorch requirements, the channel dimension has to be first.
         obs = np.swapaxes(obs, 0, 2)
         obs = np.swapaxes(obs, 2, 1)
 
-        return obs
+        return obs, info
 
     def step(self, action):
-        obs, reward, done, truncated, info = self._env.step(action[0])
+        obs, reward, terminated, truncated, info = self._env.step(action[0])
         self._rewards.append(reward)
         obs = obs.astype(np.float32) / 255.0
-        if done or truncated:
-            info = {"reward": sum(self._rewards), "length": len(self._rewards)}
+        if terminated or truncated:
+            info["episode"] = {"r": sum(self._rewards), "l": len(self._rewards)}
         else:
             info = None
         # To conform PyTorch requirements, the channel dimension has to be first.
         obs = np.swapaxes(obs, 0, 2)
         obs = np.swapaxes(obs, 2, 1)
 
-        return obs, reward, done or truncated, info
+        return obs, reward, terminated, truncated, info
 
     def render(self):
         img = self._env.render()
