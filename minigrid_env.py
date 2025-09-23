@@ -17,11 +17,11 @@ class Minigrid:
         # On MiniGrid-Memory-S7-v0, the default view size is too large to actually demand a recurrent policy.
         self._env = RGBImgPartialObsWrapper(self._env, tile_size=28)
         self._env = ImgObsWrapper(self._env)
-        self._observation_space = spaces.Box(low=0, high=1.0, shape=(3, 84, 84), dtype=np.float32)
+        self._env = TransposeAndNormalizeObs(self._env)
 
     @property
     def observation_space(self):
-        return self._observation_space
+        return self._env.observation_space
 
     @property
     def action_space(self):
@@ -32,31 +32,28 @@ class Minigrid:
     def reset(self):
         self._rewards = []
         obs, info = self._env.reset(seed=np.random.randint(0, 99))
-        obs = obs.astype(np.float32) / 255.0
-        # To conform PyTorch requirements, the channel dimension has to be first.
-        obs = np.swapaxes(obs, 0, 2)
-        obs = np.swapaxes(obs, 2, 1)
-
         return obs, info
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self._env.step(action[0])
         self._rewards.append(reward)
-        obs = obs.astype(np.float32) / 255.0
         if terminated or truncated:
             info["episode"] = {"r": sum(self._rewards), "l": len(self._rewards)}
         else:
             info = None
-        # To conform PyTorch requirements, the channel dimension has to be first.
-        obs = np.swapaxes(obs, 0, 2)
-        obs = np.swapaxes(obs, 2, 1)
-
         return obs, reward, terminated, truncated, info
 
-    def render(self):
-        img = self._env.render()
-        time.sleep(0.5)
-        return img
 
-    def close(self):
-        self._env.close()
+class TransposeAndNormalizeObs(gym.ObservationWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        h, w = env.observation_space.shape[0:2]
+        self.observation_space = gym.spaces.Box(
+            low=0.0, high=1.0, shape=(3, h, w), dtype=np.float32
+        )
+
+    def observation(self, obs):
+        o = obs.astype(np.float32) / 255.0
+        # Convert from (H, W, C) to (C, H, W)
+        o = np.transpose(o, (2, 0, 1))
+        return o
