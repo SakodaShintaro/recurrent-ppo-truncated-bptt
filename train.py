@@ -13,17 +13,9 @@ from model import ActorCriticModel
 
 
 class PPOTrainer:
-    def __init__(self, run_id: str = "run", device: torch.device = torch.device("cpu")) -> None:
-        """Initializes all needed training components.
-
-        Arguments:
-            config {dict} -- Configuration and hyperparameters of the environment, trainer and model.
-            run_id {str, optional} -- A tag used to save Tensorboard Summaries and the trained model. Defaults to "run".
-            device {torch.device, optional} -- Determines the training device. Defaults to cpu.
-        """
+    def __init__(self) -> None:
         # Set variables
-        self.device = device
-        self.run_id = run_id
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Init dummy environment and retrieve action and observation spaces
         print("Step 1: Init dummy environment")
@@ -321,12 +313,5 @@ class PPOTrainer:
 
 
 if __name__ == "__main__":
-    run_id = "run"
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    torch.set_default_dtype(torch.float32)
-    torch.set_default_device(device)
-
-    # Initialize the PPO trainer and commence training
-    trainer = PPOTrainer(run_id=run_id, device=device)
+    trainer = PPOTrainer()
     trainer.run_training()
