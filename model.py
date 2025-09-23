@@ -6,21 +6,10 @@ from torch.nn import functional as F
 
 
 class ActorCriticModel(nn.Module):
-    def __init__(self, config, observation_space, action_space_shape):
-        """Model setup
-
-        Arguments:
-            config {dict} -- Configuration and hyperparameters of the environment, trainer and model.
-            observation_space {box} -- Properties of the agent's observation space
-            action_space_shape {tuple} -- Dimensions of the action space
-        """
+    def __init__(self, hidden_size, layer_type, observation_space, action_space_shape):
         super().__init__()
-        self.hidden_size = config["hidden_size"]
-        self.recurrence = config["recurrence"]
-        self.observation_space_shape = observation_space.shape
-
-        self.layer_type = self.recurrence["layer_type"]
-        self.sequence_length = self.recurrence["sequence_length"]
+        self.hidden_size = hidden_size
+        self.layer_type = layer_type
 
         # Observation encoder
         # Visual encoder made of 3 convolutional layers
@@ -41,12 +30,7 @@ class ActorCriticModel(nn.Module):
 
         # Hidden layer
         self.lin_hidden_out = nn.Linear(self.hidden_size, self.hidden_size)
-
-        # Decouple policy from value
-        # Hidden layer of the policy
         self.lin_policy = nn.Linear(self.hidden_size, self.hidden_size)
-
-        # Hidden layer of the value function
         self.lin_value = nn.Linear(self.hidden_size, self.hidden_size)
 
         # Outputs / Model heads
@@ -120,11 +104,6 @@ class ActorCriticModel(nn.Module):
         return pi, value, memory_out
 
     def _init_weights(self, module: nn.Module) -> None:
-        """Initialize weights with orthogonal initialization.
-
-        Arguments:
-            module {nn.Module} -- Module to initialize
-        """
         for name, param in module.named_parameters():
             if "bias" in name:
                 nn.init.constant_(param, 0)
@@ -132,31 +111,12 @@ class ActorCriticModel(nn.Module):
                 nn.init.orthogonal_(param, np.sqrt(2))
 
     def get_conv_output(self, shape: tuple) -> int:
-        """Computes the output size of the convolutional layers by feeding a dummy tensor.
-
-        Arguments:
-            shape {tuple} -- Input shape of the data feeding the first convolutional layer
-
-        Returns:
-            {int} -- Number of output features returned by the utilized convolutional layers
-        """
         o = self.conv1(torch.zeros(1, *shape))
         o = self.conv2(o)
         o = self.conv3(o)
         return int(np.prod(o.size()))
 
     def init_recurrent_cell_states(self, num_sequences: int, device: torch.device) -> tuple:
-        """Initializes the recurrent cell states (hxs, cxs) as zeros.
-
-        Arguments:
-            num_sequences {int} -- The number of sequences determines the number of the to be generated initial recurrent cell states.
-            device {torch.device} -- Target device.
-
-        Returns:
-            {tuple} -- Depending on the used recurrent layer type, just hidden states (gru) or both hidden states and
-                     cell states are returned using initial values.
-        """
-
         hxs = torch.zeros(
             (num_sequences),
             self.hidden_size,

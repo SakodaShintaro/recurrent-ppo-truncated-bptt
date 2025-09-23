@@ -45,7 +45,10 @@ class PPOTrainer:
         # Init model
         print("Step 3: Init model and optimizer")
         self.model = ActorCriticModel(
-            self.config, self.observation_space, self.action_space_shape
+            self.config["hidden_size"],
+            self.config["recurrence"]["layer_type"],
+            self.observation_space,
+            self.action_space_shape,
         ).to(self.device)
         self.model.train()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=2.0e-4)
@@ -205,9 +208,7 @@ class PPOTrainer:
             # Retrieve the to be trained mini batches via a generator
             mini_batch_generator = self.buffer.recurrent_mini_batch_generator()
             for mini_batch in mini_batch_generator:
-                train_info.append(
-                    self._train_mini_batch(mini_batch)
-                )
+                train_info.append(self._train_mini_batch(mini_batch))
         return train_info
 
     def _train_mini_batch(self, samples: dict) -> list:

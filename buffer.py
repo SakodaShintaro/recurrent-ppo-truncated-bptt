@@ -33,9 +33,7 @@ class Buffer:
 
         # Initialize the buffer's data storage for a single environment
         self.rewards = np.zeros(self.worker_steps, dtype=np.float32)
-        self.actions = torch.zeros(
-            (self.worker_steps, len(action_space_shape)), dtype=torch.long
-        )
+        self.actions = torch.zeros((self.worker_steps, len(action_space_shape)), dtype=torch.long)
         self.dones = np.zeros(self.worker_steps, dtype=bool)
         self.obs = torch.zeros((self.worker_steps,) + observation_space.shape)
         self.hxs = torch.zeros((self.worker_steps, hidden_size))
@@ -207,6 +205,7 @@ class Buffer:
             start = end
             yield mini_batch
 
+    @torch.no_grad()
     def calc_advantages(self, last_value: torch.tensor, gamma: float, td_lambda: float) -> None:
         """Generalized advantage estimation (GAE)
 
@@ -215,17 +214,16 @@ class Buffer:
             gamma {float} -- Discount factor
             td_lambda {float} -- GAE regularization parameter
         """
-        with torch.no_grad():
-            mask = torch.logical_not(torch.from_numpy(self.dones))
-            rewards = torch.from_numpy(self.rewards)
-            values = self.values
-            last_value = last_value.squeeze().cpu()
-            last_advantage = torch.zeros_like(last_value)
-            for t in reversed(range(self.worker_steps)):
-                if not mask[t]:
-                    last_value = torch.zeros_like(last_value)
-                    last_advantage = torch.zeros_like(last_advantage)
-                delta = rewards[t] + gamma * last_value - values[t]
-                last_advantage = delta + gamma * td_lambda * last_advantage
-                self.advantages[t] = last_advantage
-                last_value = values[t]
+        mask = torch.logical_not(torch.from_numpy(self.dones))
+        rewards = torch.from_numpy(self.rewards)
+        values = self.values
+        last_value = last_value.squeeze().cpu()
+        last_advantage = torch.zeros_like(last_value)
+        for t in reversed(range(self.worker_steps)):
+            if not mask[t]:
+                last_value = torch.zeros_like(last_value)
+                last_advantage = torch.zeros_like(last_advantage)
+            delta = rewards[t] + gamma * last_value - values[t]
+            last_advantage = delta + gamma * td_lambda * last_advantage
+            self.advantages[t] = last_advantage
+            last_value = values[t]
