@@ -8,7 +8,7 @@ import torch
 from torch import optim
 
 from buffer import Buffer
-from minigrid_env import make_env
+from minigrid_env import Minigrid
 from model import ActorCriticModel
 
 
@@ -19,7 +19,7 @@ class PPOTrainer:
 
         # Init dummy environment and retrieve action and observation spaces
         print("Step 1: Init dummy environment")
-        self.env = make_env(env_id="MiniGrid-MemoryS9-v0", partial_obs=True)
+        self.env = Minigrid(env_name="MiniGrid-MemoryS9-v0", realtime_mode=False)
         self.observation_space = self.env.observation_space
         self.action_space_shape = (self.env.action_space.n,)
 
@@ -27,7 +27,7 @@ class PPOTrainer:
         print("Step 2: Init buffer")
         self.worker_steps = 1024
         hidden_size = 256
-        self.layer_type = "gru"
+        self.layer_type = "lstm"
         sequence_length = 8
         self.buffer = Buffer(
             self.worker_steps,
@@ -306,7 +306,7 @@ class PPOTrainer:
         result["reward_std"] = np.std([info["episode"]["r"] for info in episode_info])
         result["length_mean"] = np.mean([info["episode"]["l"] for info in episode_info])
         result["length_std"] = np.std([info["episode"]["l"] for info in episode_info])
-        assert result["reward_mean"] >= 0, "reward mean is not greater than or equal to 0"
+        assert result["reward_mean"] > 0, "reward mean is not greater than 0"
         return result
 
 
