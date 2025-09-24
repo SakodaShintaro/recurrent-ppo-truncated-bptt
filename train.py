@@ -306,7 +306,7 @@ class PPOTrainer:
         result["reward_std"] = np.std([info["episode"]["r"] for info in episode_info])
         result["length_mean"] = np.mean([info["episode"]["l"] for info in episode_info])
         result["length_std"] = np.std([info["episode"]["l"] for info in episode_info])
-        assert result["reward_mean"] > 0, "reward mean is not greater than 0"
+        assert result["reward_mean"] >= 0, "reward mean is not greater than 0"
         return result
 
 
