@@ -1,3 +1,4 @@
+import argparse
 import time
 from collections import deque
 from pathlib import Path
@@ -10,6 +11,12 @@ from torch import optim
 from buffer import Buffer
 from minigrid_env import Minigrid
 from model import ActorCriticModel
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--trial_num", type=int, default=1)
+    return parser.parse_args()
 
 
 class PPOTrainer:
@@ -78,6 +85,8 @@ class PPOTrainer:
 
         start = time.time()
 
+        max_reward_mean = -np.inf
+
         for update in range(2000):
             # Sample training data
             sampled_episode_info = self._sample_training_data()
@@ -92,6 +101,7 @@ class PPOTrainer:
             # Store recent episode infos
             episode_infos.extend(sampled_episode_info)
             episode_result = self._process_episode_info(episode_infos)
+            max_reward_mean = max(max_reward_mean, episode_result["reward_mean"])
             if episode_result["reward_mean"] >= 0.9:
                 print(f"Solved! reward_mean={episode_result['reward_mean']}")
                 break
@@ -113,7 +123,8 @@ class PPOTrainer:
                 torch.mean(self.buffer.values),
                 torch.mean(self.buffer.advantages),
             )
-            print(result)
+            if update % 10 == 0:
+                print(result)
             result_dict = {
                 "elapsed_min": elapsed_min,
                 "update": update,
@@ -136,6 +147,8 @@ class PPOTrainer:
             del self.buffer.samples_flat
             if self.device.type == "cuda":
                 torch.cuda.empty_cache()
+
+        return episode_result["reward_mean"]
 
     @torch.no_grad()
     def _sample_training_data(self) -> list:
@@ -314,5 +327,12 @@ class PPOTrainer:
 
 
 if __name__ == "__main__":
-    trainer = PPOTrainer()
-    trainer.run_training()
+    args = parse_args()
+
+    rewards = []
+
+    for i in range(args.trial_num):
+        trainer = PPOTrainer()
+        reward = trainer.run_training()
+        rewards.append(reward)
+        print(i, rewards)
