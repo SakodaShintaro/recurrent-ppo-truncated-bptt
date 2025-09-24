@@ -92,6 +92,9 @@ class PPOTrainer:
             # Store recent episode infos
             episode_infos.extend(sampled_episode_info)
             episode_result = self._process_episode_info(episode_infos)
+            if episode_result["reward_mean"] >= 0.9:
+                print(f"Solved! reward_mean={episode_result['reward_mean']}")
+                break
 
             elapsed_sec = time.time() - start
             elapsed_min = elapsed_sec / 60
