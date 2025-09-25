@@ -148,7 +148,7 @@ class PPOTrainer:
             if self.device.type == "cuda":
                 torch.cuda.empty_cache()
 
-        return episode_result["reward_mean"]
+        return update, float(episode_result["reward_mean"])
 
     @torch.no_grad()
     def _sample_training_data(self) -> list:
@@ -329,10 +329,11 @@ class PPOTrainer:
 if __name__ == "__main__":
     args = parse_args()
 
-    rewards = []
+    results = []
 
     for i in range(args.trial_num):
         trainer = PPOTrainer()
-        reward = trainer.run_training()
-        rewards.append(reward)
-        print(i, rewards)
+        update, reward = trainer.run_training()
+        results.append((update, reward))
+        for j in range(len(results)):
+            print(f"trial {j}: update {results[j][0]}, reward {results[j][1]:.3f}")
