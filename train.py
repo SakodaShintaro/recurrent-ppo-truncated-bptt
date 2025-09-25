@@ -9,7 +9,7 @@ import torch
 from torch import optim
 
 from buffer import Buffer
-from minigrid_env import Minigrid
+from minigrid_env import make_env
 from model import ActorCriticModel
 
 
@@ -26,7 +26,7 @@ class PPOTrainer:
 
         # Init dummy environment and retrieve action and observation spaces
         print("Step 1: Init dummy environment")
-        self.env = Minigrid(env_id="MiniGrid-MemoryS9-v0")
+        self.env = make_env(env_id="MiniGrid-MemoryS9-v0")
         self.observation_space = self.env.observation_space
         self.action_space_shape = (self.env.action_space.n,)
 

@@ -1,41 +1,6 @@
 import gymnasium as gym
 import minigrid
 import numpy as np
-from gymnasium import spaces
-
-
-class Minigrid:
-    def __init__(self, env_id):
-        self._env = gym.make(env_id, agent_view_size=3, tile_size=28, render_mode="rgb_array")
-        # Decrease the agent's view size to raise the agent's memory challenge
-        # On MiniGrid-Memory-S7-v0, the default view size is too large to actually demand a recurrent policy.
-        self._env = minigrid.wrappers.RGBImgPartialObsWrapper(self._env, tile_size=28)
-        self._env = minigrid.wrappers.ImgObsWrapper(self._env)
-        self._env = TransposeAndNormalizeObs(self._env)
-
-    @property
-    def observation_space(self):
-        return self._env.observation_space
-
-    @property
-    def action_space(self):
-        # This reduces the agent's action space to the only relevant actions (rotate left/right, move forward)
-        # to solve the Minigrid-Memory environment.
-        return spaces.Discrete(3)
-
-    def reset(self):
-        self._rewards = []
-        obs, info = self._env.reset(seed=np.random.randint(0, 99))
-        return obs, info
-
-    def step(self, action):
-        obs, reward, terminated, truncated, info = self._env.step(action[0])
-        self._rewards.append(reward)
-        if terminated or truncated:
-            info["episode"] = {"r": sum(self._rewards), "l": len(self._rewards)}
-        else:
-            info = None
-        return obs, reward, terminated, truncated, info
 
 
 class TransposeAndNormalizeObs(gym.ObservationWrapper):
