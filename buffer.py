@@ -26,9 +26,8 @@ class Buffer:
         # Setup members
         self.device = device
         self.worker_steps = worker_steps
-        self.n_mini_batches = 4
+        self.n_mini_batches = 8
         self.batch_size = self.worker_steps
-        self.mini_batch_size = self.batch_size // self.n_mini_batches
         self.layer_type = layer_type
         self.sequence_length = sequence_length
         self.true_sequence_length = 0

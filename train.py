@@ -32,7 +32,7 @@ class PPOTrainer:
 
         # Init buffer
         print("Step 2: Init buffer")
-        self.worker_steps = 1024
+        self.worker_steps = 4096
         hidden_size = 256
         self.layer_type = "lstm"
         sequence_length = 8
