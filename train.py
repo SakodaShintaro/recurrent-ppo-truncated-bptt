@@ -26,7 +26,7 @@ class PPOTrainer:
 
         # Init dummy environment and retrieve action and observation spaces
         print("Step 1: Init dummy environment")
-        self.env = Minigrid(env_name="MiniGrid-MemoryS9-v0", realtime_mode=False)
+        self.env = Minigrid(env_id="MiniGrid-MemoryS9-v0")
         self.observation_space = self.env.observation_space
         self.action_space_shape = (self.env.action_space.n,)
 
